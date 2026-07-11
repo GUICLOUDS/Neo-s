@@ -1,0 +1,360 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+
+local runningConnection
+local renderConnection
+
+local function setup(character)
+if runningConnection then
+runningConnection:Disconnect()
+runningConnection = nil
+end
+
+if renderConnection then
+renderConnection:Disconnect()
+renderConnection = nil
+end
+
+local humanoid = character:WaitForChild("Humanoid")
+
+local idleAnim1 = Instance.new("Animation")
+idleAnim1.AnimationId = "rbxassetid://178130996"
+
+local idleAnim2 = Instance.new("Animation")
+idleAnim2.AnimationId = "rbxassetid://74897796"
+
+local walkAnim = Instance.new("Animation")
+walkAnim.AnimationId = "rbxassetid://180436334"
+
+local idleTrack1 = humanoid:LoadAnimation(idleAnim1)
+local idleTrack2 = humanoid:LoadAnimation(idleAnim2)
+local walkTrack = humanoid:LoadAnimation(walkAnim)
+
+local fadeTime = 0.3
+local state = ""
+
+local airTime = 0
+local currentWalkSpeed = 1
+local targetWalkSpeed = 1
+
+local function playIdle()
+if state == "Idle" then
+return
+end
+
+state = "Idle"
+
+walkTrack:Stop(fadeTime)
+
+idleTrack1:Play(fadeTime)
+idleTrack1.TimePosition = 0
+idleTrack1:AdjustSpeed(1)
+
+idleTrack2:Play(fadeTime)
+idleTrack2.TimePosition = 0.5
+idleTrack2:AdjustSpeed(0)
+end
+
+local function playWalk()
+if state == "Walk" then
+return
+end
+
+state = "Walk"
+
+idleTrack1:Stop(fadeTime)
+idleTrack2:Stop(fadeTime)
+
+walkTrack:Play(fadeTime)
+walkTrack.TimePosition = 0
+walkTrack:AdjustSpeed(currentWalkSpeed)
+end
+
+playIdle()
+
+runningConnection = humanoid.Running:Connect(function(speed)
+if humanoid.Health <= 0 then
+return
+end
+
+if speed > 0.1 then
+playWalk()
+else
+playIdle()
+end
+end)
+
+renderConnection = RunService.RenderStepped:Connect(function(dt)
+if not character.Parent or humanoid.Health <= 0 then
+if runningConnection then
+runningConnection:Disconnect()
+runningConnection = nil
+end
+
+if renderConnection then
+renderConnection:Disconnect()
+renderConnection = nil
+end
+
+idleTrack1:Stop(0)
+idleTrack2:Stop(0)
+walkTrack:Stop(0)
+
+return
+end
+
+local humanoidState = humanoid:GetState()
+
+if humanoidState == Enum.HumanoidStateType.Jumping
+or humanoidState == Enum.HumanoidStateType.Freefall then
+airTime += dt
+targetWalkSpeed = math.max(0.1, 0.9 - airTime * 1.7)
+else
+airTime = 0
+targetWalkSpeed = 0.9
+end
+
+currentWalkSpeed += (targetWalkSpeed - currentWalkSpeed) * math.min(dt * 10, 0.9)
+walkTrack:AdjustSpeed(currentWalkSpeed)
+
+for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+if track ~= idleTrack1 and track ~= idleTrack2 and track ~= walkTrack then
+track:Stop(0)
+end
+end
+end)
+end
+
+if player.Character then
+setup(player.Character)
+end
+
+player.CharacterAdded:Connect(setup)
+
+-- movement
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+
+local function onCharacterAdded(character)
+local humanoid = character:WaitForChild("Humanoid")
+humanoid.UseJumpPower = true
+humanoid.JumpPower = 0
+
+humanoid:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
+humanoid:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
+humanoid:SetStateEnabled(Enum.HumanoidStateType.Physics, false)
+end
+
+if player.Character then
+onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)
+
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
+local M = math
+local RAD = M.rad
+local ANG = CFrame.Angles
+local V3 = Vector3
+local V2 = Vector2
+
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local hrp = character:WaitForChild("HumanoidRootPart")
+local torso = character:WaitForChild("Torso")
+humanoid.AutoRotate = false
+local rootJoint = hrp:WaitForChild("RootJoint")
+
+local PositionConfig = {
+X = 0,
+Y = 0,
+Z = 0
+}
+
+local defaultC0 = rootJoint.C0
+local attachment = Instance.new("Attachment")
+attachment.Name = "TiltAttachment"
+attachment.Parent = hrp
+local align = Instance.new("AlignOrientation")
+align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+align.Attachment0 = attachment
+align.MaxTorque = 1e7
+align.Responsiveness = 50
+align.Parent = hrp
+
+local lastPos = hrp.Position
+local tiltX, tiltY, tiltZ = 0, 0, 0
+local slopeTilt = 0
+local currentYaw = RAD(hrp.Orientation.Y)
+local isShiftLock = false
+local MOVE_TILT_MAX = RAD(99)
+local SIT_TILT_MAX = RAD(5)
+local VERTICAL_UP_TILT = RAD(35)
+local VERTICAL_DOWN_TILT = RAD(10)
+local SLOPE_MAX = RAD(45)
+local SMOOTH = 10
+
+local LeanConfig = {
+LeftLean = 0.5,
+RightLean = 0.5,
+WalkLean = 3.5,
+RunLean = 3.6,
+BackwardsLean = 0.5,
+JumpLean = 1,
+FallLean = 1
+}
+
+local IdleConfig = {
+Enabled = true,
+IdleThreshold = 0.1,
+RotationX = RAD(-25),
+RotationY = RAD(0),
+RotationZ = RAD(0),
+Smooth = 8
+}
+
+local idleX, idleY, idleZ = 0, 0, 0
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.FilterDescendantsInstances = {character}
+
+local function lerpAngle(a, b, t)
+return a + M.atan2(M.sin(b - a), M.cos(b - a)) * t
+end
+
+UserInputService.InputBegan:Connect(function(input, gp)
+if gp then return end
+if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+isShiftLock = not isShiftLock
+end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+if humanoid.Health <= 0 then return end
+
+rootJoint.C0 =
+defaultC0 *
+CFrame.new(
+PositionConfig.X,
+PositionConfig.Y,
+PositionConfig.Z
+)
+
+local velocity = (hrp.Position - lastPos) / M.max(dt, 1/60)
+lastPos = hrp.Position
+
+local targetSlope = 0
+local ray = Workspace:Raycast(hrp.Position, V3.new(0, -10, 0), rayParams)
+
+if ray and ray.Instance and ray.Instance.CanCollide then
+targetSlope = -hrp.CFrame.LookVector:Dot(ray.Normal) * SLOPE_MAX * 1.5
+end
+
+if humanoid.Sit then
+targetSlope *= 2
+end
+
+slopeTilt += (targetSlope - slopeTilt) * dt * SMOOTH
+
+local targetX, targetZ = 0, 0
+local moveDir = humanoid.MoveDirection
+local planarSpeed = V2.new(velocity.X, velocity.Z).Magnitude
+
+local targetIdleX, targetIdleY, targetIdleZ = 0, 0, 0
+
+if IdleConfig.Enabled and planarSpeed < IdleConfig.IdleThreshold then
+targetIdleX = IdleConfig.RotationX
+targetIdleY = IdleConfig.RotationY
+targetIdleZ = IdleConfig.RotationZ
+end
+
+idleX += (targetIdleX - idleX) * dt * IdleConfig.Smooth
+idleY += (targetIdleY - idleY) * dt * IdleConfig.Smooth
+idleZ += (targetIdleZ - idleZ) * dt * IdleConfig.Smooth
+
+local baseTilt = humanoid.Sit and SIT_TILT_MAX or MOVE_TILT_MAX
+
+if planarSpeed > 0.1 then
+local forwardDot = moveDir:Dot(hrp.CFrame.LookVector)
+local moveMultiplier = (planarSpeed < 16) and LeanConfig.WalkLean or LeanConfig.RunLean
+
+if forwardDot < 0 then
+moveMultiplier *= LeanConfig.BackwardsLean
+end
+
+targetX = -forwardDot * baseTilt * moveMultiplier
+
+local rightDot = moveDir:Dot(hrp.CFrame.RightVector)
+
+if rightDot > 0 then
+targetZ = -rightDot * baseTilt * LeanConfig.RightLean
+else
+targetZ = -rightDot * baseTilt * LeanConfig.LeftLean
+end
+end
+
+local intensity = M.clamp(velocity.Y / 50, -1, 1)
+local targetY
+
+if velocity.Y > 0 then
+targetY = intensity * VERTICAL_UP_TILT * LeanConfig.JumpLean
+else
+targetY = intensity * VERTICAL_DOWN_TILT * LeanConfig.FallLean
+end
+
+if humanoid.Sit then
+targetY *= 2
+end
+
+tiltX += (targetX - tiltX) * dt * SMOOTH
+tiltY += (targetY - tiltY) * dt * SMOOTH
+tiltZ += (targetZ - tiltZ) * dt * SMOOTH
+
+local targetYaw = currentYaw
+
+if isShiftLock then
+local cam = Workspace.CurrentCamera
+if cam then
+targetYaw = M.atan2(-cam.CFrame.LookVector.X, -cam.CFrame.LookVector.Z)
+end
+elseif moveDir.Magnitude > 0.1 then
+targetYaw = M.atan2(-moveDir.X, -moveDir.Z)
+end
+
+currentYaw = lerpAngle(currentYaw, targetYaw, dt * (isShiftLock and 40 or 10))
+
+align.CFrame =
+ANG(0, currentYaw, 0) *
+ANG(tiltY + slopeTilt, 0, 0) *
+ANG(tiltX, 0, tiltZ) *
+ANG(idleX, idleY, idleZ)
+end)
+
+local TweenService = game:GetService("TweenService")
+
+local tweenInfo = TweenInfo.new(
+1.5,
+Enum.EasingStyle.Sine,
+Enum.EasingDirection.InOut
+)
+
+task.spawn(function()
+while humanoid.Parent do
+TweenService:Create(humanoid, tweenInfo, {
+HipHeight = -1.5
+}):Play()
+
+task.wait(0.8)
+
+TweenService:Create(humanoid, tweenInfo, {
+HipHeight = -2
+}):Play()
+
+task.wait(0.8)
+end
+end)
