@@ -1,137 +1,158 @@
+local Players=game:GetService("Players")
+local player=Players.LocalPlayer
+local disableOnce=true
+local function onCharacterAdded(character)
+if not disableOnce then
+return
+end
+disableOnce=false
+local humanoid=character:WaitForChild("Humanoid")
+humanoid.WalkSpeed=0
+end
+if player.Character then
+onCharacterAdded(player.Character)
+end
+player.CharacterAdded:Connect(onCharacterAdded)
+Wait(0.5)
+-- remove walking animation
+
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
-
 local player = Players.LocalPlayer
+local disableOnce = true
+local suppressedNames = {
+WalkAnim = true,
+FallAnim = true,
+Animation1 = true,
+Animation2 = true,
+JumpAnim = true,
+}
 
-local runningConnection
-local renderConnection
-
-local function setup(character)
-if runningConnection then
-runningConnection:Disconnect()
-runningConnection = nil
-end
-
-if renderConnection then
-renderConnection:Disconnect()
-renderConnection = nil
-end
-
-local humanoid = character:WaitForChild("Humanoid")
-
-local idleAnim1 = Instance.new("Animation")
-idleAnim1.AnimationId = "rbxassetid://178130996"
-
-local idleAnim2 = Instance.new("Animation")
-idleAnim2.AnimationId = "rbxassetid://74897796"
-
-local walkAnim = Instance.new("Animation")
-walkAnim.AnimationId = "rbxassetid://180436334"
-
-local idleTrack1 = humanoid:LoadAnimation(idleAnim1)
-local idleTrack2 = humanoid:LoadAnimation(idleAnim2)
-local walkTrack = humanoid:LoadAnimation(walkAnim)
-
-local fadeTime = 0.3
-local state = ""
-
-local airTime = 0
-local currentWalkSpeed = 1
-local targetWalkSpeed = 1
-
-local function playIdle()
-if state == "Idle" then
-return
-end
-
-state = "Idle"
-
-walkTrack:Stop(fadeTime)
-
-idleTrack1:Play(fadeTime)
-idleTrack1.TimePosition = 0
-idleTrack1:AdjustSpeed(1)
-
-idleTrack2:Play(fadeTime)
-idleTrack2.TimePosition = 0.5
-idleTrack2:AdjustSpeed(0)
-end
-
-local function playWalk()
-if state == "Walk" then
-return
-end
-
-state = "Walk"
-
-idleTrack1:Stop(fadeTime)
-idleTrack2:Stop(fadeTime)
-
-walkTrack:Play(fadeTime)
-walkTrack.TimePosition = 0
-walkTrack:AdjustSpeed(currentWalkSpeed)
-end
-
-playIdle()
-
-runningConnection = humanoid.Running:Connect(function(speed)
-if humanoid.Health <= 0 then
-return
-end
-
-if speed > 0.1 then
-playWalk()
-else
-playIdle()
-end
-end)
-
-renderConnection = RunService.RenderStepped:Connect(function(dt)
-if not character.Parent or humanoid.Health <= 0 then
-if runningConnection then
-runningConnection:Disconnect()
-runningConnection = nil
-end
-
-if renderConnection then
-renderConnection:Disconnect()
-renderConnection = nil
-end
-
-idleTrack1:Stop(0)
-idleTrack2:Stop(0)
-walkTrack:Stop(0)
-
-return
-end
-
-local humanoidState = humanoid:GetState()
-
-if humanoidState == Enum.HumanoidStateType.Jumping
-or humanoidState == Enum.HumanoidStateType.Freefall then
-airTime += dt
-targetWalkSpeed = math.max(0.1, 0.9 - airTime * 1.7)
-else
-airTime = 0
-targetWalkSpeed = 0.9
-end
-
-currentWalkSpeed += (targetWalkSpeed - currentWalkSpeed) * math.min(dt * 10, 0.9)
-walkTrack:AdjustSpeed(currentWalkSpeed)
-
-for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
-if track ~= idleTrack1 and track ~= idleTrack2 and track ~= walkTrack then
+local function stopIfSuppressed(track)
+if track.Animation and suppressedNames[track.Animation.Name] then
 track:Stop(0)
 end
 end
-end)
+local function setupCharacter(character)
+if not disableOnce then
+return
 end
-
+disableOnce = false
+local humanoid = character:WaitForChild("Humanoid")
+for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+stopIfSuppressed(track)
+end
+humanoid.AnimationPlayed:Connect(stopIfSuppressed)
+end
 if player.Character then
-setup(player.Character)
+setupCharacter(player.Character)
 end
+player.CharacterAdded:Connect(setupCharacter)
 
-player.CharacterAdded:Connect(setup)
+
+-- walk
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+local fadeTime = 0.3
+local walkAnimation = Instance.new("Animation")
+walkAnimation.AnimationId = "rbxassetid://180436334"
+local walkAnimationTrack = animator:LoadAnimation(walkAnimation)
+local isMoving = false
+local function playWalkAnimation()
+if not walkAnimationTrack.IsPlaying then
+walkAnimationTrack:Play(fadeTime)
+walkAnimationTrack.TimePosition = 0
+walkAnimationTrack:AdjustSpeed(0.8)
+end
+end
+local function stopWalkAnimation()
+if walkAnimationTrack.IsPlaying then
+walkAnimationTrack:Stop(fadeTime)
+end
+end
+game:GetService("RunService").Heartbeat:Connect(function()
+local isCurrentlyMoving = humanoid.MoveDirection.Magnitude > 0
+if isCurrentlyMoving and not isMoving then
+playWalkAnimation()
+isMoving = true
+elseif not isCurrentlyMoving and isMoving then
+stopWalkAnimation()
+isMoving = false
+end
+end)
+
+
+-- idle
+
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+local fadeTime = 0.3
+local idleAnimation = Instance.new("Animation")
+idleAnimation.AnimationId = "rbxassetid://178130996"
+local idleAnimationTrack = animator:LoadAnimation(idleAnimation)
+local function playIdleAnimation()
+if humanoid.MoveDirection.Magnitude == 0 then
+if not idleAnimationTrack.IsPlaying then
+idleAnimationTrack:Play(fadeTime)
+idleAnimationTrack.TimePosition = 1
+idleAnimationTrack:AdjustSpeed(0)
+end
+end
+end
+local function stopIdleAnimation()
+if idleAnimationTrack.IsPlaying then
+idleAnimationTrack:Stop(fadeTime)
+end
+end
+game:GetService("RunService").Heartbeat:Connect(function()
+playIdleAnimation()
+if humanoid.MoveDirection.Magnitude > 0 then
+stopIdleAnimation()
+end
+end)
+
+
+
+-- idle
+
+
+
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+local fadeTime = 0.3
+local idleAnimation = Instance.new("Animation")
+idleAnimation.AnimationId = "rbxassetid://74897796"
+local idleAnimationTrack = animator:LoadAnimation(idleAnimation)
+local function playIdleAnimation()
+if humanoid.MoveDirection.Magnitude == 0 then
+if not idleAnimationTrack.IsPlaying then
+idleAnimationTrack:Play(fadeTime)
+idleAnimationTrack.TimePosition = 1
+idleAnimationTrack:AdjustSpeed(0)
+end
+end
+end
+local function stopIdleAnimation()
+if idleAnimationTrack.IsPlaying then
+idleAnimationTrack:Stop(fadeTime)
+end
+end
+game:GetService("RunService").Heartbeat:Connect(function()
+playIdleAnimation()
+if humanoid.MoveDirection.Magnitude > 0 then
+stopIdleAnimation()
+end
+end)
 
 -- movement
 
@@ -358,3 +379,17 @@ HipHeight = -2
 task.wait(0.8)
 end
 end)
+Wait(0.5)
+local Players=game:GetService("Players")
+local player=Players.LocalPlayer
+
+local function onCharacterAdded(character)
+local humanoid=character:WaitForChild("Humanoid")
+humanoid.WalkSpeed=16
+end
+
+if player.Character then
+onCharacterAdded(player.Character)
+end
+
+player.CharacterAdded:Connect(onCharacterAdded)
