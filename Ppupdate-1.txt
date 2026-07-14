@@ -1,0 +1,486 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local LocalPlayer = Players.LocalPlayer
+local Camera = Workspace.CurrentCamera
+
+local targetPlayer
+local scanConnection
+local isEnabled = false
+
+local offsetX = 0.5
+local offsetY = -4.85
+local offsetZ = 0.0         
+local baseZOffset = -1.0
+local currentMode = "No Collision"
+local jiggleMultiplier = 1.0
+
+local animation = Instance.new("Animation")
+animation.AnimationId = "rbxassetid://85568863"
+local animationTrack = nil
+local fadeTime = 0.3
+
+local springProperties = {
+    stiffness = 150,
+    damping = 12,
+    maxRotation = math.rad(45)
+}
+
+local jiggleRot = Vector3.zero
+local jiggleVel = Vector3.zero
+local lastTargetRot = CFrame.identity
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "funny_Gui"
+ScreenGui.ResetOnSpawn = true
+ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
+
+local MainFrame = Instance.new("Frame")
+MainFrame.Name = "MainFrame"
+MainFrame.Size = UDim2.new(0, 180, 0, 330)
+MainFrame.Position = UDim2.new(0, 20, 0.5, -165)
+MainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+MainFrame.BorderSizePixel = 2
+MainFrame.BorderColor3 = Color3.fromRGB(180, 0, 0)
+MainFrame.Active = true
+MainFrame.Draggable = true
+MainFrame.Parent = ScreenGui
+
+local Title = Instance.new("TextLabel")
+Title.Name = "Title"
+Title.Size = UDim2.new(1, 0, 0, 30)
+Title.Position = UDim2.new(0, 0, 0, 0)
+Title.BackgroundTransparency = 1
+Title.Text = "funny"
+Title.TextColor3 = Color3.fromRGB(255, 0, 0)
+Title.TextSize = 20
+Title.Font = Enum.Font.SourceSansBold
+Title.Parent = MainFrame
+
+local ToggleButton = Instance.new("TextButton")
+ToggleButton.Name = "ToggleButton"
+ToggleButton.Size = UDim2.new(0.85, 0, 0, 30)
+ToggleButton.Position = UDim2.new(0.075, 0, 0, 35)
+ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 10, 10)
+ToggleButton.BorderSizePixel = 1
+ToggleButton.BorderColor3 = Color3.fromRGB(255, 0, 0)
+ToggleButton.Text = "Enable"
+ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ToggleButton.TextSize = 15
+ToggleButton.Font = Enum.Font.SourceSansSemibold
+ToggleButton.Parent = MainFrame
+
+local ModeButton = Instance.new("TextButton")
+ModeButton.Name = "ModeButton"
+ModeButton.Size = UDim2.new(0.85, 0, 0, 30)
+ModeButton.Position = UDim2.new(0.075, 0, 0, 70)
+ModeButton.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+ModeButton.BorderSizePixel = 1
+ModeButton.BorderColor3 = Color3.fromRGB(180, 0, 0)
+ModeButton.Text = "Mode: No Collision"
+ModeButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+ModeButton.TextSize = 13
+ModeButton.Font = Enum.Font.SourceSansSemibold
+ModeButton.Parent = MainFrame
+
+local LeftButton = Instance.new("TextButton")
+LeftButton.Name = "LeftButton"
+LeftButton.Size = UDim2.new(0.4, 0, 0, 30)
+LeftButton.Position = UDim2.new(0.075, 0, 0, 105)
+LeftButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+LeftButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+LeftButton.Text = "Left"
+LeftButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+LeftButton.Parent = MainFrame
+
+local RightButton = Instance.new("TextButton")
+RightButton.Name = "RightButton"
+RightButton.Size = UDim2.new(0.4, 0, 0, 30)
+RightButton.Position = UDim2.new(0.525, 0, 0, 105)
+RightButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+RightButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+RightButton.Text = "Right"
+RightButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+RightButton.Parent = MainFrame
+
+local UpButton = Instance.new("TextButton")
+UpButton.Name = "UpButton"
+UpButton.Size = UDim2.new(0.4, 0, 0, 30)
+UpButton.Position = UDim2.new(0.075, 0, 0, 140)
+UpButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+UpButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+UpButton.Text = "Up"
+UpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+UpButton.Parent = MainFrame
+
+local DownButton = Instance.new("TextButton")
+DownButton.Name = "DownButton"
+DownButton.Size = UDim2.new(0.4, 0, 0, 30)
+DownButton.Position = UDim2.new(0.525, 0, 0, 140)
+DownButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+DownButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+DownButton.Text = "Down"
+DownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+DownButton.Parent = MainFrame
+
+local FrontButton = Instance.new("TextButton")
+FrontButton.Name = "FrontButton"
+FrontButton.Size = UDim2.new(0.4, 0, 0, 30)
+FrontButton.Position = UDim2.new(0.075, 0, 0, 175)
+FrontButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+FrontButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+FrontButton.Text = "Front"
+FrontButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+FrontButton.Parent = MainFrame
+
+local BackButton = Instance.new("TextButton")
+BackButton.Name = "BackButton"
+BackButton.Size = UDim2.new(0.4, 0, 0, 30)
+BackButton.Position = UDim2.new(0.525, 0, 0, 175)
+BackButton.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+BackButton.BorderColor3 = Color3.fromRGB(100, 0, 0)
+BackButton.Text = "Back"
+BackButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+BackButton.Parent = MainFrame
+
+local JiggleDownButton = Instance.new("TextButton")
+JiggleDownButton.Name = "JiggleDownButton"
+JiggleDownButton.Size = UDim2.new(0.4, 0, 0, 30)
+JiggleDownButton.Position = UDim2.new(0.075, 0, 0, 210)
+JiggleDownButton.BackgroundColor3 = Color3.fromRGB(40, 20, 40)
+JiggleDownButton.BorderColor3 = Color3.fromRGB(120, 0, 120)
+JiggleDownButton.Text = "Jiggle -"
+JiggleDownButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+JiggleDownButton.Parent = MainFrame
+
+local JiggleUpButton = Instance.new("TextButton")
+JiggleUpButton.Name = "JiggleUpButton"
+JiggleUpButton.Size = UDim2.new(0.4, 0, 0, 30)
+JiggleUpButton.Position = UDim2.new(0.525, 0, 0, 210)
+JiggleUpButton.BackgroundColor3 = Color3.fromRGB(40, 20, 40)
+JiggleUpButton.BorderColor3 = Color3.fromRGB(120, 0, 120)
+JiggleUpButton.Text = "Jiggle +"
+JiggleUpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+JiggleUpButton.Parent = MainFrame
+
+local SaveButton = Instance.new("TextButton")
+SaveButton.Name = "SaveButton"
+SaveButton.Size = UDim2.new(0.85, 0, 0, 30)
+SaveButton.Position = UDim2.new(0.075, 0, 0, 245)
+SaveButton.BackgroundColor3 = Color3.fromRGB(0, 50, 0)
+SaveButton.BorderColor3 = Color3.fromRGB(0, 180, 0)
+SaveButton.Text = "Save Config"
+SaveButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+SaveButton.Font = Enum.Font.SourceSansBold
+SaveButton.Parent = MainFrame
+
+local StatusLabel = Instance.new("TextLabel")
+StatusLabel.Name = "StatusLabel"
+StatusLabel.Size = UDim2.new(0.85, 0, 0, 40)
+StatusLabel.Position = UDim2.new(0.075, 0, 0, 280)
+StatusLabel.BackgroundTransparency = 1
+StatusLabel.Text = "X: 0.50 | Y: -4.85 | Z: -1.00\nJiggle: 1.0x"
+StatusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+StatusLabel.TextSize = 12
+StatusLabel.Font = Enum.Font.SourceSansItalic
+StatusLabel.Parent = MainFrame
+
+local function updateStatusDisplay()
+    StatusLabel.Text = string.format("X: %.2f | Y: %.2f | Z: %.2f\nJiggle: %.1fx", offsetX, offsetY, baseZOffset + offsetZ, jiggleMultiplier)
+end
+
+local function saveConfig()
+    local fileContent = string.format("X_Offset=%.2f\nY_Offset=%.2f\nZ_Offset=%.2f\nMode=%s\nJiggle_Multiplier=%.1f", offsetX, offsetY, offsetZ, currentMode, jiggleMultiplier)
+    
+    local configFolder = Workspace:FindFirstChild("FunnyConfig")
+    if not configFolder then
+        configFolder = Instance.new("Folder")
+        configFolder.Name = "FunnyConfig"
+        configFolder.Parent = Workspace
+    end
+    
+    local txtObject = configFolder:FindFirstChild("funny position.txt")
+    if not txtObject then
+        txtObject = Instance.new("StringValue")
+        txtObject.Name = "funny position.txt"
+        txtObject.Parent = configFolder
+    end
+    txtObject.Value = fileContent
+    
+    if writefile then
+        pcall(function()
+            writefile("funny position.txt", fileContent)
+        end)
+    end
+    
+    SaveButton.Text = "Saved!"
+    task.delay(1.5, function()
+        SaveButton.Text = "Save Config"
+    end)
+end
+
+local function loadConfig()
+    local content = nil
+    
+    if readfile then
+        local success, result = pcall(readfile, "funny position.txt")
+        if success and result then content = result end
+    end
+    
+    if not content then
+        local configFolder = Workspace:FindFirstChild("FunnyConfig")
+        local txtObject = configFolder and configFolder:FindFirstChild("funny position.txt")
+        if txtObject then content = txtObject.Value end
+    end
+    
+    if content then
+        local savedX = content:match("X_Offset=([%d.-]+)")
+        local savedY = content:match("Y_Offset=([%d.-]+)")
+        local savedZ = content:match("Z_Offset=([%d.-]+)")
+        local savedMode = content:match("Mode=([%a%s]+)")
+        local savedJiggle = content:match("Jiggle_Multiplier=([%d.-]+)")
+        
+        if savedX then offsetX = tonumber(savedX) or offsetX end
+        if savedY then offsetY = tonumber(savedY) or offsetY end
+        if savedZ then offsetZ = tonumber(savedZ) or offsetZ end
+        if savedJiggle then jiggleMultiplier = tonumber(savedJiggle) or jiggleMultiplier end
+        
+        if savedMode then
+            currentMode = savedMode
+            if currentMode == "With Collision" then
+                baseZOffset = -1.37
+                ModeButton.Text = "Mode: Collision"
+            else
+                baseZOffset = -1.0
+                ModeButton.Text = "Mode: No Collision"
+            end
+        end
+        updateStatusDisplay()
+    end
+end
+
+loadConfig()
+
+local function stopAttachmentOnly()
+    if animationTrack and animationTrack.IsPlaying then
+        animationTrack:Stop(fadeTime)
+    end
+    
+    local myChar = LocalPlayer.Character
+    local myHumanoid = myChar and myChar:FindFirstChild("Humanoid")
+    if myHumanoid then
+        Camera.CameraSubject = myHumanoid
+        Camera.CameraType = Enum.CameraType.Custom
+    end
+    
+    local myRootPart = myChar and myChar:FindFirstChild("HumanoidRootPart")
+    if myRootPart then
+        myRootPart.Velocity = Vector3.zero
+        myRootPart.RotVelocity = Vector3.zero
+    end
+end
+
+local function stopEverything()
+    stopAttachmentOnly()
+    if scanConnection then
+        scanConnection:Disconnect()
+        scanConnection = nil
+    end
+    targetPlayer = nil
+end
+
+local function setupCharacter(character)
+    local humanoid = character:WaitForChild("Humanoid", 10)
+    if humanoid then
+        animationTrack = humanoid:LoadAnimation(animation)
+        humanoid.Died:Connect(function()
+            stopEverything()
+            ScreenGui:Destroy()
+        end)
+    end
+end
+
+if LocalPlayer.Character then
+    setupCharacter(LocalPlayer.Character)
+end
+
+local function startMainLoop()
+    if scanConnection then scanConnection:Disconnect() end
+    scanConnection = RunService.Heartbeat:Connect(function(dt)
+        if not isEnabled then return end
+        
+        if targetPlayer and not targetPlayer.Parent then
+            targetPlayer = nil
+            stopAttachmentOnly()
+        end
+        
+        local myCurrentChar = LocalPlayer.Character
+        local myRoot = myCurrentChar and myCurrentChar:FindFirstChild("HumanoidRootPart")
+        if not myRoot then return end
+        
+        if not targetPlayer then
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr ~= LocalPlayer and plr.Character then
+                    local root = plr.Character:FindFirstChild("HumanoidRootPart")
+                    local enemyHumanoid = plr.Character:FindFirstChild("Humanoid")
+                    
+                    if root and enemyHumanoid and enemyHumanoid.Health > 0 and (root.Position - myRoot.Position).Magnitude <= 5 then
+                        targetPlayer = plr
+                        jiggleRot = Vector3.zero
+                        jiggleVel = Vector3.zero
+                        lastTargetRot = CFrame.identity
+                        break
+                    end
+                end
+            end
+        end
+        
+        if targetPlayer then
+            local targetChar = targetPlayer.Character
+            local targetRootPart = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+            
+            local targetTorso = targetChar and (targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso") or targetRootPart)
+            local enemyHumanoid = targetChar and targetChar:FindFirstChild("Humanoid")
+            
+            if targetRootPart and targetTorso and enemyHumanoid and enemyHumanoid.Health > 0 then
+                if Camera.CameraSubject ~= enemyHumanoid then
+                    Camera.CameraType = Enum.CameraType.Custom
+                    Camera.CameraSubject = enemyHumanoid
+                end
+                
+                local activeHumanoid = myCurrentChar:FindFirstChild("Humanoid")
+                if activeHumanoid and (not animationTrack or not animationTrack.IsPlaying) then
+                    animationTrack = activeHumanoid:LoadAnimation(animation)
+                    if animationTrack then
+                        animationTrack:Play(fadeTime)
+                        animationTrack.TimePosition = 1
+                        animationTrack:AdjustSpeed(0)
+                    end
+                end
+                
+                if lastTargetRot == CFrame.identity then
+                    lastTargetRot = targetTorso.CFrame.Rotation
+                end
+                
+                pcall(function()
+                    sethiddenproperty(myRoot, "PhysicsRepRootPart", targetRootPart)
+                end)
+                
+                local targetVel = targetRootPart.AssemblyLinearVelocity
+                local localVel = targetTorso.CFrame:VectorToObjectSpace(targetVel)
+                
+                local currentTargetRot = targetTorso.CFrame.Rotation
+                local rotDelta = lastTargetRot:ToObjectSpace(currentTargetRot)
+                local rx, ry, rz = rotDelta:ToEulerAnglesYXZ()
+                local yawVelocity = ry / math.max(dt, 0.001)
+                lastTargetRot = currentTargetRot
+                
+                local swayForce = ((localVel.X * 3.5) + (yawVelocity * 12.0)) * jiggleMultiplier
+                
+                local pitchForce = swayForce
+                local rollForce = 0
+                
+                local force = Vector3.new(pitchForce, 0, rollForce)
+                
+                local springForce = -springProperties.stiffness * jiggleRot - springProperties.damping * jiggleVel + force
+                jiggleVel = jiggleVel + springForce * dt
+                jiggleRot = jiggleRot + jiggleVel * dt
+                
+                local cap = springProperties.maxRotation
+                jiggleRot = Vector3.new(
+                    math.clamp(jiggleRot.X, -cap, cap),
+                    0,
+                    math.clamp(jiggleRot.Z, -cap, cap)
+                )
+                
+                local baseOffsetRotation = CFrame.Angles(0, 0, math.rad(90))
+                local physicsJiggleRotation = CFrame.Angles(jiggleRot.X, 0, 0)
+                
+                local staticCFrame = (CFrame.new(targetTorso.Position) 
+                    * targetTorso.CFrame.Rotation 
+                    * CFrame.new(offsetX, offsetY, baseZOffset + offsetZ)) 
+                    * baseOffsetRotation
+                
+                local pivotOffset = CFrame.new(0, 0, 0.5)
+                
+                myRoot.CFrame = staticCFrame * pivotOffset * physicsJiggleRotation * pivotOffset:Inverse()
+                
+                myRoot.Velocity = targetRootPart.AssemblyLinearVelocity
+                myRoot.RotVelocity = targetRootPart.AssemblyAngularVelocity
+            else
+                stopAttachmentOnly()
+                lastTargetRot = CFrame.identity
+            end
+        end
+    end)
+end
+
+ToggleButton.MouseButton1Click:Connect(function()
+    isEnabled = not isEnabled
+    if isEnabled then
+        ToggleButton.Text = "Disable"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(150, 0, 0)
+        ToggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        startMainLoop()
+    else
+        ToggleButton.Text = "Enable"
+        ToggleButton.BackgroundColor3 = Color3.fromRGB(35, 10, 10)
+        ToggleButton.TextColor3 = Color3.fromRGB(200, 200, 200)
+        stopEverything()
+    end
+end)
+
+ModeButton.MouseButton1Click:Connect(function()
+    if currentMode == "No Collision" then
+        currentMode = "With Collision"
+        baseZOffset = -1.37
+        ModeButton.Text = "Mode: Collision"
+    else
+        currentMode = "No Collision"
+        baseZOffset = -1.0
+        ModeButton.Text = "Mode: No Collision"
+    end
+    updateStatusDisplay()
+end)
+
+LeftButton.MouseButton1Click:Connect(function()
+    offsetX = offsetX - 0.1
+    updateStatusDisplay()
+end)
+
+RightButton.MouseButton1Click:Connect(function()
+    offsetX = offsetX + 0.1
+    updateStatusDisplay()
+end)
+
+UpButton.MouseButton1Click:Connect(function()
+    offsetY = offsetY + 0.1
+    updateStatusDisplay()
+end)
+
+DownButton.MouseButton1Click:Connect(function()
+    offsetY = offsetY - 0.1
+    updateStatusDisplay()
+end)
+
+FrontButton.MouseButton1Click:Connect(function()
+    offsetZ = offsetZ - 0.1
+    updateStatusDisplay()
+end)
+
+BackButton.MouseButton1Click:Connect(function()
+    offsetZ = offsetZ + 0.1
+    updateStatusDisplay()
+end)
+
+JiggleDownButton.MouseButton1Click:Connect(function()
+    jiggleMultiplier = math.max(0, jiggleMultiplier - 0.2)
+    updateStatusDisplay()
+end)
+
+JiggleUpButton.MouseButton1Click:Connect(function()
+    jiggleMultiplier = jiggleMultiplier + 0.2
+    updateStatusDisplay()
+end)
+
+SaveButton.MouseButton1Click:Connect(saveConfig)
