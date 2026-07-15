@@ -1,0 +1,2407 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local Debris = game:GetService("Debris")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+local hrp = character:WaitForChild("HumanoidRootPart")
+local camera = workspace.CurrentCamera
+
+local comboIndex = 1
+local isAttacking = false
+local punchCooldown = false
+local skillCooldown = false
+local skill2Cooldown = false
+local skill3Cooldown = false
+local jumpCooldown = false
+local movementActive = true
+local lastPunchTime = 0
+local jumpVisibilityConnection
+
+local isGaleRunning = false
+local baseWalkSpeed = 10
+local galeRunSpeed = 32
+
+humanoid.JumpPower = 0
+humanoid.JumpHeight = 0
+humanoid.WalkSpeed = baseWalkSpeed
+
+local suppressedNames = {
+	WalkAnim = true,
+	FallAnim = true,
+	Animation1 = true,
+	Animation2 = true,
+	JumpAnim = true,
+}
+
+local function stopIfSuppressed(track)
+	if track.Animation and suppressedNames[track.Animation.Name] then
+		track:Stop(0)
+	end
+end
+
+for _, track in ipairs(humanoid:GetPlayingAnimationTracks()) do
+	stopIfSuppressed(track)
+end
+humanoid.AnimationPlayed:Connect(stopIfSuppressed)
+
+local customWalkAnim = Instance.new("Animation")
+customWalkAnim.AnimationId = "rbxassetid://180426354"
+local walkAnimation = animator:LoadAnimation(customWalkAnim)
+
+local walkFadeTime = 0.3
+local walkAnimationBaseSpeed = 0.5
+
+local function updateWalkAnimation()
+	if humanoid.MoveDirection.Magnitude > 0 then
+		if not walkAnimation.IsPlaying then
+			walkAnimation:Play(walkFadeTime)
+			walkAnimation.TimePosition = 0
+		end
+		walkAnimation:AdjustSpeed(walkAnimationBaseSpeed)
+	else
+		if walkAnimation.IsPlaying then
+			walkAnimation:Stop(walkFadeTime)
+		end
+	end
+end
+
+humanoid:GetPropertyChangedSignal("MoveDirection"):Connect(updateWalkAnimation)
+humanoid:GetPropertyChangedSignal("WalkSpeed"):Connect(updateWalkAnimation)
+
+local combatGui = Instance.new("ScreenGui")
+combatGui.Name = "CombatGui"
+combatGui.ResetOnSpawn = true
+
+task.spawn(function()
+	local playerGui = player:WaitForChild("PlayerGui")
+	local touchGui = playerGui:WaitForChild("TouchGui", 10)
+	if touchGui then
+		local touchFrame = touchGui:WaitForChild("TouchControlFrame", 5)
+		if touchFrame then
+			local jumpButton = touchFrame:WaitForChild("JumpButton", 5)
+			if jumpButton then
+				jumpButton.Visible = false
+				jumpVisibilityConnection = jumpButton:GetPropertyChangedSignal("Visible"):Connect(function()
+					jumpButton.Visible = false
+				end)
+			end
+		end
+	end
+end)
+
+humanoid.Died:Connect(function()
+	if jumpVisibilityConnection then
+		jumpVisibilityConnection:Disconnect()
+	end
+	combatGui:Destroy()
+	local playerGui = player:FindFirstChild("PlayerGui")
+	if playerGui then
+		local touchGui = playerGui:FindFirstChild("TouchGui")
+		if touchGui then
+			local touchFrame = touchGui:FindFirstChild("TouchControlFrame")
+			if touchFrame then
+				local jumpButton = touchFrame:FindFirstChild("JumpButton")
+				if jumpButton then
+					jumpButton.Visible = true
+				end
+			end
+		end
+	end
+end)
+
+local function playAnimation(animId, fade, timePos, speed, stopDelay)
+	local anim = Instance.new("Animation")
+	anim.AnimationId = animId
+
+	local track
+	local success, err = pcall(function()
+		track = animator:LoadAnimation(anim)
+	end)
+
+	if success and track then
+		track:Play(fade)
+		track.TimePosition = timePos
+		track:AdjustSpeed(speed)
+
+		task.delay(stopDelay, function()
+			if track and track.IsPlaying then
+				track:Stop(fade)
+			end
+		end)
+		return track
+	end
+	return nil
+end
+
+local function screenShake(duration, intensity)
+	local startTime = tick()
+	local shakeConnection
+	shakeConnection = RunService.RenderStepped:Connect(function()
+		local elapsed = tick() - startTime
+		if elapsed >= duration or not camera then
+			shakeConnection:Disconnect()
+			return
+		end
+		local offset = Vector3.new(
+			math.random(-100, 100) / 100 * intensity,
+			math.random(-100, 100) / 100 * intensity,
+			0
+		)
+		camera.CFrame = camera.CFrame * CFrame.new(offset)
+	end)
+end
+
+local Lighting = game:GetService("Lighting")
+local baseFOV = camera and camera.FieldOfView or 70
+
+local flashFrame = Instance.new("Frame")
+flashFrame.Name = "ImpactFlash"
+flashFrame.Size = UDim2.new(1, 0, 1, 0)
+flashFrame.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+flashFrame.BackgroundTransparency = 1
+flashFrame.BorderSizePixel = 0
+flashFrame.ZIndex = 50
+flashFrame.Parent = combatGui
+
+local fxBloom = Lighting:FindFirstChild("CombatBloomFX") or Instance.new("BloomEffect")
+fxBloom.Name = "CombatBloomFX"
+fxBloom.Intensity = 0
+fxBloom.Size = 24
+fxBloom.Threshold = 1.5
+fxBloom.Parent = Lighting
+
+local fxColor = Lighting:FindFirstChild("CombatColorFX") or Instance.new("ColorCorrectionEffect")
+fxColor.Name = "CombatColorFX"
+fxColor.Saturation = 0
+fxColor.Contrast = 0
+fxColor.Parent = Lighting
+
+local function screenFlash(color, startTransparency, duration)
+	startTransparency = startTransparency or 0.8
+	duration = duration or 0.15
+	flashFrame.BackgroundColor3 = color
+	flashFrame.BackgroundTransparency = startTransparency
+	TweenService:Create(flashFrame, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		BackgroundTransparency = 1,
+	}):Play()
+end
+
+local function cameraPunch(fovDrop, duration)
+	if not camera then return end
+	fovDrop = fovDrop or 4
+	duration = duration or 0.15
+	TweenService:Create(camera, TweenInfo.new(duration * 0.35, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		FieldOfView = math.max(20, baseFOV - fovDrop),
+	}):Play()
+	task.delay(duration * 0.35, function()
+		if camera then
+			TweenService:Create(camera, TweenInfo.new(duration * 0.65, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+				FieldOfView = baseFOV,
+			}):Play()
+		end
+	end)
+end
+
+local function lightingPulse(duration, satBoost, bloomBoost)
+	duration = duration or 0.3
+	satBoost = satBoost or 0.3
+	bloomBoost = bloomBoost or 1.4
+	TweenService:Create(fxColor, TweenInfo.new(duration * 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Saturation = satBoost,
+		Contrast = 0.1,
+	}):Play()
+	TweenService:Create(fxBloom, TweenInfo.new(duration * 0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Intensity = bloomBoost,
+	}):Play()
+	task.delay(duration * 0.3, function()
+		TweenService:Create(fxColor, TweenInfo.new(duration * 0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Saturation = 0,
+			Contrast = 0,
+		}):Play()
+		TweenService:Create(fxBloom, TweenInfo.new(duration * 0.7, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+			Intensity = 0,
+		}):Play()
+	end)
+end
+
+local function spawnSlashArc(cf, color, size)
+	size = size or 6
+
+	local slash = Instance.new("Part")
+	slash.Anchored = true
+	slash.CanCollide = false
+	slash.CanQuery = false
+	slash.CanTouch = false
+	slash.Material = Enum.Material.Neon
+	slash.Color = color
+	slash.Size = Vector3.new(size, size * 0.55, 0.05)
+	slash.CFrame = cf
+	slash.Transparency = 0.1
+	slash.Parent = Workspace
+
+	local mesh = Instance.new("SpecialMesh")
+	mesh.MeshType = Enum.MeshType.Sphere
+	mesh.Scale = Vector3.new(1, 1, 0.05)
+	mesh.Parent = slash
+
+	TweenService:Create(slash, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Transparency = 1,
+		Size = slash.Size * 1.5,
+	}):Play()
+	Debris:AddItem(slash, 0.3)
+end
+
+local EffectTextures = {
+	Spark = "rbxasset://textures/particles/sparkles_main.dds",
+	Smoke = "rbxasset://textures/particles/smoke_main.dds",
+}
+
+local function flashLight(position, color, range, brightness, duration)
+	duration = duration or 0.25
+	local holder = Instance.new("Part")
+	holder.Anchored = true
+	holder.CanCollide = false
+	holder.CanQuery = false
+	holder.CanTouch = false
+	holder.Transparency = 1
+	holder.Size = Vector3.new(0.1, 0.1, 0.1)
+	holder.CFrame = CFrame.new(position)
+	holder.Parent = Workspace
+
+	local light = Instance.new("PointLight")
+	light.Color = color
+	light.Range = range or 12
+	light.Brightness = brightness or 6
+	light.Parent = holder
+
+	TweenService:Create(light, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Brightness = 0,
+		Range = 0,
+	}):Play()
+
+	Debris:AddItem(holder, duration + 0.1)
+end
+
+local function spawnDebris(cf, color, count)
+	count = count or 6
+	for _ = 1, count do
+		local shard = Instance.new("Part")
+		shard.Anchored = false
+		shard.CanCollide = false
+		shard.CanQuery = false
+		shard.CanTouch = false
+		shard.Massless = true
+		shard.Material = Enum.Material.Neon
+		shard.Color = color
+		shard.Size = Vector3.new(
+			math.random(2, 5) / 10,
+			math.random(2, 5) / 10,
+			math.random(2, 5) / 10
+		)
+		shard.CFrame = cf * CFrame.new(
+			math.random(-15, 15) / 10,
+			math.random(-5, 15) / 10,
+			math.random(-15, 15) / 10
+		) * CFrame.Angles(math.random(0, 360), math.random(0, 360), math.random(0, 360))
+		shard.Parent = Workspace
+
+		local dir = Vector3.new(
+			math.random(-100, 100),
+			math.random(30, 140),
+			math.random(-100, 100)
+		)
+		if dir.Magnitude == 0 then dir = Vector3.new(0, 1, 0) end
+		dir = dir.Unit
+
+		shard.AssemblyLinearVelocity = dir * math.random(14, 28)
+		shard.AssemblyAngularVelocity = Vector3.new(
+			math.random(-12, 12),
+			math.random(-12, 12),
+			math.random(-12, 12)
+		)
+
+		local a0 = Instance.new("Attachment")
+		a0.Position = Vector3.new(0, shard.Size.Y / 2, 0)
+		a0.Parent = shard
+
+		local a1 = Instance.new("Attachment")
+		a1.Position = Vector3.new(0, -shard.Size.Y / 2, 0)
+		a1.Parent = shard
+
+		local trail = Instance.new("Trail")
+		trail.Attachment0 = a0
+		trail.Attachment1 = a1
+		trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+		trail.Transparency = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.1),
+			NumberSequenceKeypoint.new(0.6, 0.55),
+			NumberSequenceKeypoint.new(1, 1),
+		})
+		trail.WidthScale = NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 1),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+		trail.LightEmission = 0.6
+		trail.Lifetime = 0.25
+		trail.MinLength = 0
+		trail.Parent = shard
+
+		task.delay(0.3, function()
+			if shard.Parent then
+				TweenService:Create(shard, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					Transparency = 1,
+				}):Play()
+			end
+		end)
+
+		Debris:AddItem(shard, 0.85)
+	end
+end
+
+local function spawnImpactBurst(cf, color, count, size)
+	count = count or 12
+	size = size or 0.6
+
+	local part = Instance.new("Part")
+	part.Anchored = true
+	part.CanCollide = false
+	part.CanQuery = false
+	part.CanTouch = false
+	part.Transparency = 1
+	part.Size = Vector3.new(0.2, 0.2, 0.2)
+	part.CFrame = cf
+	part.Parent = Workspace
+
+	flashLight(cf.Position, color, 10, 5, 0.2)
+
+	local core = Instance.new("ParticleEmitter")
+	core.Texture = EffectTextures.Spark
+	core.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+	core.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, size),
+		NumberSequenceKeypoint.new(0.4, size * 0.65),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	core.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0),
+		NumberSequenceKeypoint.new(0.7, 0.35),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	core.LightEmission = 0.65
+	core.LightInfluence = 0
+	core.Lifetime = NumberRange.new(0.18, 0.35)
+	core.Speed = NumberRange.new(8, 20)
+	core.SpreadAngle = Vector2.new(180, 180)
+	core.Rate = 0
+	core.Rotation = NumberRange.new(0, 360)
+	core.RotSpeed = NumberRange.new(-220, 220)
+	core.Parent = part
+	core:Emit(count)
+
+	local smoke = Instance.new("ParticleEmitter")
+	smoke.Texture = EffectTextures.Smoke
+	smoke.Color = ColorSequence.new(color)
+	smoke.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, size * 0.7),
+		NumberSequenceKeypoint.new(1, size * 2.4),
+	})
+	smoke.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.55),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	smoke.LightInfluence = 1
+	smoke.Lifetime = NumberRange.new(0.35, 0.6)
+	smoke.Speed = NumberRange.new(1, 3)
+	smoke.SpreadAngle = Vector2.new(180, 180)
+	smoke.Rate = 0
+	smoke.Parent = part
+	smoke:Emit(math.max(2, math.floor(count / 3)))
+
+	Debris:AddItem(part, 1)
+end
+
+local function spawnRing(position, color, startSize, endSize, duration)
+	duration = duration or 0.4
+	flashLight(position, color, 16, 7, duration)
+
+	local function makeRing(sizeMul, startTransparency, thickness)
+		local ring = Instance.new("Part")
+		ring.Anchored = true
+		ring.CanCollide = false
+		ring.CanQuery = false
+		ring.CanTouch = false
+		ring.Material = Enum.Material.Neon
+		ring.Color = color
+		ring.Shape = Enum.PartType.Cylinder
+		ring.Size = Vector3.new(thickness, startSize * sizeMul, startSize * sizeMul)
+		ring.CFrame = CFrame.new(position) * CFrame.Angles(0, 0, math.rad(90))
+		ring.Transparency = startTransparency
+		ring.Parent = Workspace
+
+		TweenService:Create(ring, TweenInfo.new(duration, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+			Size = Vector3.new(thickness, endSize * sizeMul, endSize * sizeMul),
+			Transparency = 1,
+		}):Play()
+		Debris:AddItem(ring, duration + 0.1)
+	end
+
+	makeRing(1, 0.1, 0.15)
+	makeRing(0.72, 0.4, 0.32)
+end
+
+local function attachTrail(part, color, offsetA, offsetB, lifetime, widthNumSeq)
+	local a0 = Instance.new("Attachment")
+	a0.Name = "FXTrailA0"
+	a0.Position = offsetA or Vector3.new(0, 1, 0)
+	a0.Parent = part
+
+	local a1 = Instance.new("Attachment")
+	a1.Name = "FXTrailA1"
+	a1.Position = offsetB or Vector3.new(0, -1, 0)
+	a1.Parent = part
+
+	local trail = Instance.new("Trail")
+	trail.Attachment0 = a0
+	trail.Attachment1 = a1
+	trail.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+	trail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.05),
+		NumberSequenceKeypoint.new(0.5, 0.4),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	trail.LightEmission = 0.55
+	trail.MinLength = 0
+	trail.FaceCamera = true
+	trail.Lifetime = lifetime or 0.35
+	trail.WidthScale = widthNumSeq or NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 1),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	trail.Parent = part
+
+	local function cleanup()
+		trail:Destroy()
+		a0:Destroy()
+		a1:Destroy()
+	end
+
+	return trail, cleanup
+end
+
+local function attachAura(part, color)
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = part
+
+	local sparks = Instance.new("ParticleEmitter")
+	sparks.Texture = EffectTextures.Spark
+	sparks.Color = ColorSequence.new(color, Color3.new(1, 1, 1))
+	sparks.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.4),
+		NumberSequenceKeypoint.new(0.5, 0.25),
+		NumberSequenceKeypoint.new(1, 0),
+	})
+	sparks.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.05),
+		NumberSequenceKeypoint.new(0.8, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	sparks.LightEmission = 0.7
+	sparks.Lifetime = NumberRange.new(0.3, 0.6)
+	sparks.Speed = NumberRange.new(2, 6)
+	sparks.SpreadAngle = Vector2.new(180, 180)
+	sparks.Rate = 45
+	sparks.Rotation = NumberRange.new(0, 360)
+	sparks.RotSpeed = NumberRange.new(-120, 120)
+	sparks.Parent = attachment
+
+	local motes = Instance.new("ParticleEmitter")
+	motes.Texture = EffectTextures.Spark
+	motes.Color = ColorSequence.new(color)
+	motes.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.15),
+		NumberSequenceKeypoint.new(1, 0.05),
+	})
+	motes.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.3),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	motes.LightEmission = 0.4
+	motes.Lifetime = NumberRange.new(0.6, 1)
+	motes.Speed = NumberRange.new(1, 2)
+	motes.Acceleration = Vector3.new(0, 4, 0)
+	motes.SpreadAngle = Vector2.new(30, 30)
+	motes.Rate = 20
+	motes.Parent = attachment
+
+	local function cleanup()
+		sparks.Enabled = false
+		motes.Enabled = false
+		Debris:AddItem(attachment, 1)
+	end
+
+	return sparks, cleanup
+end
+
+local function playPunchEffect(loops, interval, volume, duration, intensity, effectColor)
+	effectColor = effectColor or Color3.fromRGB(255, 225, 140)
+	task.spawn(function()
+		local sound = Instance.new("Sound")
+		sound.SoundId = "rbxassetid://139697578472716"
+		sound.Volume = volume
+		sound.Parent = camera
+
+		for i = 1, loops do
+			sound:Play()
+			screenShake(duration, intensity)
+			local hitCFrame = hrp.CFrame * CFrame.new(0, 0.5, -2.5)
+			spawnImpactBurst(hitCFrame, effectColor, 10)
+			spawnDebris(hitCFrame, effectColor, 4)
+			screenFlash(effectColor, 0.88, 0.1)
+			cameraPunch(2.5, 0.12)
+			task.wait(interval)
+		end
+		sound:Destroy()
+	end)
+end
+
+local function lerp(a, b, t)
+	return a + (b - a) * t
+end
+
+local function lerpAngle(a, b, t)
+	return a + math.atan2(math.sin(b - a), math.cos(b - a)) * t
+end
+
+local function applyPush(force, getActiveFlag)
+	task.spawn(function()
+		if not ReplicatedStorage:FindFirstChild("push") then
+			local detection = Instance.new("Decal")
+			detection.Name = "push"
+			detection.Parent = ReplicatedStorage
+		end
+		local lp = Players.LocalPlayer
+		local movel = 0.1
+		while humanoid.Health > 0 do
+			local active = getActiveFlag()
+			if not active then
+				break
+			end
+			RunService.Heartbeat:Wait()
+			local c = lp.Character
+			local pushHrp = c and c:FindFirstChild("HumanoidRootPart")
+			if pushHrp then
+				local vel = pushHrp.Velocity
+				pushHrp.Velocity = pushHrp.CFrame.LookVector * force + Vector3.new(0, force, 0)
+				RunService.RenderStepped:Wait()
+				if pushHrp then pushHrp.Velocity = vel end
+				RunService.Stepped:Wait()
+				if pushHrp then 
+					pushHrp.Velocity = vel + Vector3.new(0, movel, 0)
+				end
+				movel = -movel
+			end
+		end
+	end)
+end
+
+local galeTrack
+
+task.spawn(function()
+	local fadeTime = 0.3
+	local galeAnim = Instance.new("Animation")
+	galeAnim.AnimationId = "rbxassetid://233087184"
+	galeTrack = animator:LoadAnimation(galeAnim)
+
+	local anim1 = Instance.new("Animation")
+	anim1.AnimationId = "rbxassetid://126753849"
+	local anim2 = Instance.new("Animation")
+	anim2.AnimationId = "rbxassetid://21633130"
+
+	local track1 = animator:LoadAnimation(anim1)
+	local track2 = animator:LoadAnimation(anim2)
+
+	RunService.Heartbeat:Connect(function()
+		if not movementActive then
+			if track1.IsPlaying then track1:Stop(fadeTime) end
+			if track2.IsPlaying then track2:Stop(fadeTime) end
+			return
+		end
+		if humanoid.MoveDirection.Magnitude == 0 then
+			if not track1.IsPlaying then
+				track1:Play(fadeTime)
+				track1.TimePosition = 0.4
+				track1:AdjustSpeed(0)
+			end
+			if not track2.IsPlaying then
+				track2:Play(fadeTime)
+				track2.TimePosition = 1
+				track2:AdjustSpeed(0)
+			end
+		else
+			if track1.IsPlaying then track1:Stop(fadeTime) end
+			if track2.IsPlaying then track2:Stop(fadeTime) end
+		end
+	end)
+end)
+
+local function executeM1()
+	movementActive = false
+	humanoid.AutoRotate = false
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = attachment
+	align.MaxTorque = math.huge
+	align.Responsiveness = 200
+	align.RigidityEnabled = true
+	align.Parent = hrp
+
+	local Frames = {
+		{ Time = 0.5, RX = 35, RY = 30, RZ = 0 },
+		{ Time = 0.3, RX = -25, RY = -30, RZ = 0 },
+		{ Time = 0.2, RX = -30, RY = -35, RZ = 0 },
+		{ Time = 0.25, RX = 0, RY = 0, RZ = 0 }
+	}
+
+	playAnimation("rbxassetid://233329237", 0.3, 1, -0.19, 1)
+	playAnimation("rbxassetid://21633130", 0.3, 0, 0.1, 1)
+	playPunchEffect(1, 0.8, 6, 0.25, 0.35)
+
+	local pushActive = true
+	applyPush(190, function() return pushActive end)
+
+	task.delay(0.85, function()
+		pushActive = false
+	end)
+
+	local currentYaw = math.rad(hrp.Orientation.Y)
+	local frame = 1
+	local frameStart = tick()
+	local done = false
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function(dt)
+		if humanoid.Health <= 0 or not align or not attachment then
+			connection:Disconnect()
+			done = true
+			return
+		end
+
+		local moveDir = humanoid.MoveDirection
+		local targetYaw = currentYaw
+		if moveDir.Magnitude > 0.01 then
+			targetYaw = math.atan2(-moveDir.X, -moveDir.Z)
+		end
+		currentYaw = lerpAngle(currentYaw, targetYaw, dt * 15)
+
+		local current = Frames[frame]
+		if not current then
+			connection:Disconnect()
+			done = true
+			return
+		end
+
+		local previous = Frames[frame - 1]
+		local startRX = previous and previous.RX or 0
+		local startRY = previous and previous.RY or 0
+		local startRZ = previous and previous.RZ or 0
+
+		local alpha = math.clamp((tick() - frameStart) / current.Time, 0, 1)
+		local rx = lerp(startRX, current.RX, alpha)
+		local ry = lerp(startRY, current.RY, alpha)
+		local rz = lerp(startRZ, current.RZ, alpha)
+
+		align.CFrame = CFrame.Angles(0, currentYaw, 0) * CFrame.Angles(math.rad(rx), math.rad(ry), math.rad(rz))
+
+		if alpha >= 1 then
+			frame += 1
+			frameStart = tick()
+		end
+	end)
+
+	while not done do task.wait() end
+
+	if align then align:Destroy() end
+	if attachment then attachment:Destroy() end
+	humanoid.AutoRotate = true
+	movementActive = true
+end
+
+local function executeM2()
+	movementActive = false
+	humanoid.AutoRotate = false
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = attachment
+	align.MaxTorque = math.huge
+	align.Responsiveness = 200
+	align.RigidityEnabled = true
+	align.Parent = hrp
+
+	local Frames = {
+		{ Time = 0.5, RX = 35, RY = -30, RZ = 0 },
+		{ Time = 0.4, RX = -25, RY = 30, RZ = 0 },
+		{ Time = 0.2, RX = -30, RY = 35, RZ = 0 },
+		{ Time = 0.3, RX = 0, RY = 0, RZ = 0 }
+	}
+
+	playAnimation("rbxassetid://21633130", 0.4, 0, 1, 1)
+	playAnimation("rbxassetid://204062532", 0.3, 0, 0.5, 1)
+	playAnimation("rbxassetid://218504594", 0.5, -2, -0.4, 1)
+	playPunchEffect(1, 0.8, 6, 0.25, 0.35)
+
+	local pushActive = true
+	applyPush(190, function() return pushActive end)
+
+	task.delay(1.0, function()
+		pushActive = false
+	end)
+
+	local currentYaw = math.rad(hrp.Orientation.Y)
+	local frame = 1
+	local frameStart = tick()
+	local done = false
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function(dt)
+		if humanoid.Health <= 0 or not align or not attachment then
+			connection:Disconnect()
+			done = true
+			return
+		end
+
+		local moveDir = humanoid.MoveDirection
+		local targetYaw = currentYaw
+		if moveDir.Magnitude > 0.01 then
+			targetYaw = math.atan2(-moveDir.X, -moveDir.Z)
+		end
+		currentYaw = lerpAngle(currentYaw, targetYaw, dt * 15)
+
+		local current = Frames[frame]
+		if not current then
+			connection:Disconnect()
+			done = true
+			return
+		end
+
+		local previous = Frames[frame - 1]
+		local startRX = previous and previous.RX or 0
+		local startRY = previous and previous.RY or 0
+		local startRZ = previous and previous.RZ or 0
+
+		local alpha = math.clamp((tick() - frameStart) / current.Time, 0, 1)
+		local rx = lerp(startRX, current.RX, alpha)
+		local ry = lerp(startRY, current.RY, alpha)
+		local rz = lerp(startRZ, current.RZ, alpha)
+
+		align.CFrame = CFrame.Angles(0, currentYaw, 0) * CFrame.Angles(math.rad(rx), math.rad(ry), math.rad(rz))
+
+		if alpha >= 1 then
+			frame += 1
+			frameStart = tick()
+		end
+	end)
+
+	while not done do task.wait() end
+
+	if align then align:Destroy() end
+	if attachment then attachment:Destroy() end
+	humanoid.AutoRotate = true
+	movementActive = true
+end
+
+local function executeM3()
+	movementActive = false
+	humanoid.AutoRotate = false
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = attachment
+	align.MaxTorque = math.huge
+	align.Responsiveness = 200
+	align.RigidityEnabled = true
+	align.Parent = hrp
+
+	local spinTime = 1.5
+	local elapsed = 0
+	local done = false
+
+	playAnimation("rbxassetid://96619712", 0.35, 2.8, 0, 1.5)
+	playAnimation("rbxassetid://142890187", 0.35, 1.1, 0, 1.5)
+	playPunchEffect(3, 0.8, 6, 0.25, 0.35)
+
+	spawnRing(hrp.Position - Vector3.new(0, 3, 0), Color3.fromRGB(160, 220, 255), 1, 6, 0.35)
+	spawnDebris(hrp.CFrame * CFrame.new(0, -2.5, 0), Color3.fromRGB(180, 225, 255), 6)
+	spawnSlashArc(hrp.CFrame * CFrame.new(0, 0, -2) * CFrame.Angles(0, math.rad(90), 0), Color3.fromRGB(170, 225, 255), 7)
+	cameraPunch(4, 0.2)
+	local m3Trail, m3TrailCleanup = attachTrail(
+		hrp,
+		Color3.fromRGB(180, 230, 255),
+		Vector3.new(1.4, -2.3, 0.3),
+		Vector3.new(1.4, -2.3, -0.3),
+		0.3
+	)
+	task.delay(1.6, m3TrailCleanup)
+
+	local pushActive = true
+	applyPush(180, function() return pushActive end)
+
+	task.delay(1.1, function()
+		pushActive = false
+	end)
+
+	local startHipHeight = humanoid.HipHeight
+	local targetHipHeight = -1
+	local duration = 1.5
+	local startTime = tick()
+
+	local hhConnection
+	hhConnection = RunService.RenderStepped:Connect(function()
+		if humanoid.Health <= 0 then
+			hhConnection:Disconnect()
+			return
+		end
+		local t = math.clamp((tick() - startTime) / duration, 0, 1)
+		local progress = t < 0.5 and (2 * t * t) or (1 - ((-2 * t + 2)^2) / 2)
+		local amount = math.sin(progress * math.pi)
+		humanoid.HipHeight = startHipHeight + (targetHipHeight - startHipHeight) * amount
+
+		if t >= 1 then
+			humanoid.HipHeight = startHipHeight
+			hhConnection:Disconnect()
+		end
+	end)
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function(dt)
+		if humanoid.Health <= 0 or not align or not attachment then
+			connection:Disconnect()
+			done = true
+			return
+		end
+
+		elapsed += dt
+		local alpha = math.clamp(elapsed / spinTime, 0, 1)
+		local spinAngle = math.rad(735) * alpha
+
+		align.CFrame = CFrame.Angles(0, spinAngle, 0) * CFrame.Angles(math.rad(-10), -1, -0.5)
+
+		if alpha >= 1 then
+			connection:Disconnect()
+			done = true
+		end
+	end)
+
+	while not done do task.wait() end
+
+	if align then align:Destroy() end
+	if attachment then attachment:Destroy() end
+	humanoid.AutoRotate = true
+	movementActive = true
+end
+
+local function executeSkill1()
+	movementActive = false
+	local originalSpeed = humanoid.WalkSpeed
+	humanoid.WalkSpeed = 10
+
+	playAnimation("rbxassetid://94861246", 0.3, 0.5, 1, 0.5)
+	task.wait(0.5)
+
+	playAnimation("rbxassetid://287325678", 0.5, 0, 1, 2)
+	playAnimation("rbxassetid://142890187", 0.5, 0, 1, 2)
+
+	local targetPlayer = nil
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character then
+			local root = plr.Character:FindFirstChild("HumanoidRootPart")
+			if root and (root.Position - hrp.Position).Magnitude <= 5 then
+				targetPlayer = plr
+				break
+			end
+		end
+	end
+
+	if targetPlayer then
+		local targetChar = targetPlayer.Character
+		local targetRoot = targetChar:FindFirstChild("HumanoidRootPart")
+
+		if targetRoot then
+			humanoid.Sit = true
+			local targetTorso = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso")
+			local heightScale = targetTorso and (targetTorso.Size.Y / 2) or 1
+			local widthScale = targetTorso and ((targetTorso.Size.X / 2 + targetTorso.Size.Z / 2) / 2) or 1
+			local upOffset = -2 * heightScale
+			local distanceOffset = 2.3 * widthScale
+
+			local initialTargetPos = targetRoot.Position
+			local initialMyPos = hrp.Position
+			local direction = (initialMyPos - initialTargetPos) * Vector3.new(1, 0, 1)
+			if direction.Magnitude == 0 then direction = Vector3.new(0, 0, 1) end
+
+			local closeOffset = direction.Unit * distanceOffset
+			local heightOffset = Vector3.new(0, upOffset, 0)
+			local finalOffset = closeOffset + heightOffset
+
+			local faceTargetCFrame = CFrame.lookAt(initialMyPos, initialTargetPos * Vector3.new(1, 0, 1) + Vector3.new(0, initialMyPos.Y, 0))
+			local _, myY, myZ = faceTargetCFrame:ToEulerAnglesYXZ()
+
+			local startTime = os.clock()
+			local duration = 1.5
+			local currentFlipAngle = 0
+
+			task.spawn(function()
+				while os.clock() - startTime < duration do
+					local elapsed = os.clock() - startTime
+					local progress = math.min(elapsed / duration, 1)
+					currentFlipAngle = math.rad(progress * 360)
+					task.wait()
+				end
+				currentFlipAngle = math.rad(360)
+			end)
+
+			playPunchEffect(7, 0.14, 6, 0.25, 0.35)
+			playAnimation("rbxassetid://233064613", 0.5, 0.5, 0, 1.5)
+			playAnimation("rbxassetid://165928826", 0.3, 0, 1, 1.5)
+
+			spawnRing(targetRoot.Position - Vector3.new(0, 3, 0), Color3.fromRGB(255, 200, 80), 1, 8, 0.5)
+			spawnDebris(CFrame.new(targetRoot.Position - Vector3.new(0, 2, 0)), Color3.fromRGB(255, 205, 90), 8)
+			spawnSlashArc(CFrame.new(targetRoot.Position) * CFrame.Angles(0, math.rad(45), 0), Color3.fromRGB(255, 210, 100), 8)
+			screenFlash(Color3.fromRGB(255, 200, 90), 0.75, 0.2)
+			lightingPulse(0.3, 0.2, 1)
+			local _, skill1AuraCleanup = attachAura(hrp, Color3.fromRGB(255, 200, 80))
+			task.delay(duration, skill1AuraCleanup)
+
+			local attachConnection
+			attachConnection = RunService.Heartbeat:Connect(function()
+				if humanoid.Health <= 0 or not targetChar or not targetRoot then
+					if attachConnection then attachConnection:Disconnect() end
+					return
+				end
+				pcall(function()
+					sethiddenproperty(hrp, "PhysicsRepRootPart", targetRoot)
+				end)
+
+				local basePosition = targetRoot.Position + finalOffset
+				hrp.CFrame = CFrame.new(basePosition) * CFrame.fromEulerAnglesYXZ(currentFlipAngle, myY, myZ)
+				hrp.Velocity = Vector3.zero
+				hrp.RotVelocity = Vector3.zero
+			end)
+
+			task.wait(duration)
+
+			if attachConnection then attachConnection:Disconnect() end
+
+			if humanoid.Health > 0 then
+				local _, currentY, _ = hrp.CFrame:ToEulerAnglesYXZ()
+				hrp.CFrame = CFrame.new(hrp.Position) * CFrame.fromEulerAnglesYXZ(0, currentY, 0)
+				hrp.Velocity = Vector3.zero
+				hrp.RotVelocity = Vector3.zero
+				humanoid.Sit = false
+			end
+		end
+	else
+		task.wait(0.5)
+	end
+
+	humanoid.WalkSpeed = originalSpeed
+	movementActive = true
+end
+
+local function executeSkill2()
+	movementActive = false
+	humanoid.AutoRotate = false
+
+	local originalHipHeight = humanoid.HipHeight
+	humanoid.HipHeight = -0.5
+	local tweenInfoHH = TweenInfo.new(1.5, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	local tweenHH = TweenService:Create(humanoid, tweenInfoHH, { HipHeight = 0.1 })
+	tweenHH:Play()
+
+	playAnimation("rbxassetid://183294396", 0.5, 0, 1, 1.9)
+	playAnimation("rbxassetid://21633130", 0.5, 0, 1, 1.5)
+	playAnimation("rbxassetid://94853940", 0.5, 0, 1, 1.5)
+
+	local loopingAnim = Instance.new("Animation")
+	loopingAnim.AnimationId = "rbxassetid://126752874"
+	local loopingTrack = animator:LoadAnimation(loopingAnim)
+	loopingTrack.Looped = false
+	loopingTrack:Play(0.5)
+	loopingTrack.TimePosition = 0
+	loopingTrack:AdjustSpeed(3.5)
+
+	task.spawn(function()
+		for i = 2, 4 do
+			loopingTrack.Stopped:Wait()
+			if humanoid.Health > 0 then
+				loopingTrack:Play(0)
+				loopingTrack.TimePosition = 0
+				loopingTrack:AdjustSpeed(3.5)
+			end
+		end
+	end)
+
+	task.delay(1.5, function()
+		if loopingTrack and loopingTrack.IsPlaying then
+			loopingTrack:Stop(0.5)
+		end
+	end)
+
+	playPunchEffect(10, 0.1, 7, 0.25, 0.35)
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = attachment
+	align.MaxTorque = math.huge
+	align.Responsiveness = 35
+	align.RigidityEnabled = false
+	align.Parent = hrp
+
+	local Frames = {
+		{ RX = -15, RY = 30, RZ = 0 },
+		{ RX = -25, RY = -40, RZ = 0 },
+		{ RX = -30, RY = -50, RZ = 0 },
+		{ RX = -15, RY = 30, RZ = 0 },
+		{ RX = -25, RY = 3, RZ = 0 },
+		{ RX = -39, RY = -5, RZ = 0 },
+		{ RX = -15, RY = 45, RZ = 0 },
+		{ RX = -50, RY = 3, RZ = 0 },
+		{ RX = -30, RY = -5, RZ = 0 },
+		{ RX = 0, RY = 0, RZ = 0 }
+	}
+
+	local currentYaw = math.rad(hrp.Orientation.Y)
+	local frame = 1
+	local loopsCompleted = 0
+	local frameStart = tick()
+	local done = false
+	
+	local pushActive = true
+	applyPush(250, function() return pushActive end)
+
+	task.delay(1.6, function()
+		pushActive = false
+	end)
+
+	task.spawn(function()
+		task.wait(0.5)
+		
+		spawnRing(hrp.Position, Color3.fromRGB(255, 150, 60), 1, 12, 0.4)
+		spawnImpactBurst(hrp.CFrame * CFrame.new(0, 1, -2), Color3.fromRGB(255, 170, 80), 20, 1)
+		spawnDebris(hrp.CFrame * CFrame.new(0, 0.5, -1.5), Color3.fromRGB(255, 160, 70), 10)
+		screenFlash(Color3.fromRGB(255, 170, 80), 0.55, 0.25)
+		cameraPunch(7, 0.3)
+		lightingPulse(0.35, 0.3, 1.3)
+	end)
+
+	local alignConnection
+	alignConnection = RunService.Heartbeat:Connect(function(dt)
+		if humanoid.Health <= 0 then
+			if alignConnection then alignConnection:Disconnect() end
+			done = true
+			return
+		end
+
+		local moveDir = humanoid.MoveDirection
+		local targetYaw = currentYaw
+
+		if moveDir.Magnitude > 0.01 then
+			targetYaw = math.atan2(-moveDir.X, -moveDir.Z)
+		end
+
+		currentYaw = lerpAngle(currentYaw, targetYaw, dt * 15)
+
+		local current = Frames[frame]
+		if not current then
+			if alignConnection then alignConnection:Disconnect() end
+			done = true
+			return
+		end
+
+		local previous = Frames[frame - 1]
+		local startRX = previous and previous.RX or 0
+		local startRY = previous and previous.RY or 0
+		local startRZ = previous and previous.RZ or 0
+
+		local alpha = math.clamp((tick() - frameStart) / 0.1, 0, 1)
+		local rx = lerp(startRX, current.RX, alpha)
+		local ry = lerp(startRY, current.RY, alpha)
+		local rz = lerp(startRZ, current.RZ, alpha)
+
+		align.CFrame = CFrame.Angles(0, currentYaw, 0) * CFrame.Angles(math.rad(rx), math.rad(ry), math.rad(rz))
+
+		if alpha >= 1 then
+			frame += 1
+			frameStart = tick()
+
+			if frame > #Frames then
+				loopsCompleted += 1
+				if loopsCompleted >= 2 then
+					if alignConnection then alignConnection:Disconnect() end
+					done = true
+					return
+				end
+				frame = 1
+			end
+		end
+	end)
+
+	while not done do task.wait() end
+
+	if align then align:Destroy() end
+	if attachment then attachment:Destroy() end
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	
+	humanoid.HipHeight = originalHipHeight
+	humanoid.AutoRotate = true
+	movementActive = true
+end
+
+local function executeSkill3()
+	movementActive = false
+	humanoid.AutoRotate = false
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = attachment
+	align.MaxTorque = math.huge
+	align.Responsiveness = 200
+	align.RigidityEnabled = true
+	align.Parent = hrp
+
+	local Frames = {
+		{ Time = 1.4, RX = 40, RY = -30, RZ = 0 },
+		{ Time = 0.4, RX = -30, RY = 50, RZ = 0 },
+		{ Time = 0.2, RX = -40, RY = 55, RZ = 50 },
+		{ Time = 0.3, RX = 0, RY = 0, RZ = 0 }
+	}
+
+	local currentYaw = math.rad(hrp.Orientation.Y)
+	local frame = 1
+	local frameStart = tick()
+	local done = false
+
+	local alignConnection
+	alignConnection = RunService.Heartbeat:Connect(function(dt)
+		if humanoid.Health <= 0 or not align or not attachment then
+			if alignConnection then alignConnection:Disconnect() end
+			done = true
+			return
+		end
+
+		local moveDir = humanoid.MoveDirection
+		local targetYaw = currentYaw
+		if moveDir.Magnitude > 0.01 then
+			targetYaw = math.atan2(-moveDir.X, -moveDir.Z)
+		end
+		currentYaw = lerpAngle(currentYaw, targetYaw, dt * 15)
+
+		local current = Frames[frame]
+		if not current then
+			if alignConnection then alignConnection:Disconnect() end
+			done = true
+			return
+		end
+
+		local previous = Frames[frame - 1]
+		local startRX = previous and previous.RX or 0
+		local startRY = previous and previous.RY or 0
+		local startRZ = previous and previous.RZ or 0
+
+		local alpha = math.clamp((tick() - frameStart) / current.Time, 0, 1)
+		local rx = lerp(startRX, current.RX, alpha)
+		local ry = lerp(startRY, current.RY, alpha)
+		local rz = lerp(startRZ, current.RZ, alpha)
+
+		align.CFrame = CFrame.Angles(0, currentYaw, 0) * CFrame.Angles(math.rad(rx), math.rad(ry), math.rad(rz))
+
+		if alpha >= 1 then
+			frame += 1
+			frameStart = tick()
+		end
+	end)
+
+	playAnimation("rbxassetid://218504594", 0.5, 0.5, 0, 1.5)
+	
+	task.wait(1.5)
+	
+	playAnimation("rbxassetid://204062532", 0.5, 0, 1, 1)
+	
+	task.wait(0.2)
+	
+	local pushActive = true
+	task.spawn(function()
+		if not ReplicatedStorage:FindFirstChild("push") then
+			local detection = Instance.new("Decal")
+			detection.Name = "push"
+			detection.Parent = ReplicatedStorage
+		end
+		
+		local lp = Players.LocalPlayer
+		local movel = 0.1
+
+		spawnRing(hrp.Position, Color3.fromRGB(255, 90, 60), 1, 14, 0.45)
+		spawnImpactBurst(hrp.CFrame * CFrame.new(0, 1, -2), Color3.fromRGB(255, 120, 70), 22, 1.1)
+		spawnDebris(hrp.CFrame * CFrame.new(0, 0.5, -1.5), Color3.fromRGB(255, 110, 65), 12)
+		screenFlash(Color3.fromRGB(255, 110, 65), 0.5, 0.28)
+		cameraPunch(9, 0.32)
+		lightingPulse(0.4, 0.35, 1.5)
+
+		while pushActive and humanoid.Health > 0 do
+			RunService.Heartbeat:Wait()
+			local c = lp.Character
+			local pushHrp = c and c:FindFirstChild("HumanoidRootPart")
+			if pushHrp then
+				local vel = pushHrp.Velocity
+				pushHrp.Velocity = pushHrp.CFrame.LookVector * 250 + Vector3.new(0, 250, 0)
+				RunService.RenderStepped:Wait()
+				if pushHrp then pushHrp.Velocity = vel end
+				RunService.Stepped:Wait()
+				if pushHrp then 
+					pushHrp.Velocity = vel + Vector3.new(0, movel, 0)
+				end
+				movel = -movel
+			end
+		end
+	end)
+	
+	task.wait(0.3)
+	
+	playPunchEffect(1, 0.8, 6, 0.25, 0.35)
+	spawnSlashArc(hrp.CFrame * CFrame.new(0, 0.5, -2), Color3.fromRGB(255, 140, 80), 6)
+	
+	local leapDistance = 50
+	local leapHeight = 0
+
+	local dashTrail, dashTrailCleanup = attachTrail(
+		hrp,
+		Color3.fromRGB(255, 130, 70),
+		Vector3.new(0, 1.2, 1),
+		Vector3.new(0, -1.2, 1),
+		0.5
+	)
+
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.Velocity = hrp.CFrame.LookVector * leapDistance + Vector3.new(0, leapHeight, 0)
+	bodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+	bodyVelocity.P = 5000
+	bodyVelocity.Parent = hrp
+	Debris:AddItem(bodyVelocity, 0.1)
+
+	task.wait(0.1)
+	pushActive = false
+	task.delay(0.5, dashTrailCleanup)
+
+	while not done do task.wait() end
+
+	if align then align:Destroy() end
+	if attachment then attachment:Destroy() end
+	hrp.AssemblyLinearVelocity = Vector3.zero
+	hrp.AssemblyAngularVelocity = Vector3.zero
+	humanoid.AutoRotate = true
+	movementActive = true
+end
+
+local moveAttachment = Instance.new("Attachment")
+moveAttachment.Name = "TiltAttachment"
+moveAttachment.Parent = hrp
+
+local moveAlign = Instance.new("AlignOrientation")
+moveAlign.Mode = Enum.OrientationAlignmentMode.OneAttachment
+moveAlign.Attachment0 = moveAttachment
+moveAlign.MaxTorque = math.huge
+moveAlign.Responsiveness = 50
+moveAlign.Parent = hrp
+
+local sprintTrail, sprintTrailA0, sprintTrailA1
+do
+	sprintTrailA0 = Instance.new("Attachment")
+	sprintTrailA0.Name = "SprintTrailA0"
+	sprintTrailA0.Position = Vector3.new(-0.8, 0, 0)
+	sprintTrailA0.Parent = hrp
+
+	sprintTrailA1 = Instance.new("Attachment")
+	sprintTrailA1.Name = "SprintTrailA1"
+	sprintTrailA1.Position = Vector3.new(0.8, 0, 0)
+	sprintTrailA1.Parent = hrp
+
+	sprintTrail = Instance.new("Trail")
+	sprintTrail.Attachment0 = sprintTrailA0
+	sprintTrail.Attachment1 = sprintTrailA1
+	sprintTrail.Color = ColorSequence.new(Color3.fromRGB(210, 235, 255))
+	sprintTrail.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.4),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	sprintTrail.Lifetime = 0.25
+	sprintTrail.Enabled = false
+	sprintTrail.Parent = hrp
+end
+
+local lastPos = hrp.Position
+local tiltX, tiltY, tiltZ = 0, 0, 0
+local slopeTilt = 0
+local currentYaw = math.rad(hrp.Orientation.Y)
+local isShiftLock = false
+
+local MOVE_TILT_MAX = math.rad(55)
+local SIT_TILT_MAX = math.rad(5)
+local VERTICAL_UP_TILT = math.rad(35)
+local VERTICAL_DOWN_TILT = math.rad(10)
+local SLOPE_MAX = math.rad(45)
+local SMOOTH = 10
+
+local LeanConfig = {
+	LeftLean = 0.5, RightLean = 0.5,
+	WalkLean = 0.2, RunLean = 0.5,
+	BackwardsLean = 0.5, JumpLean = 1, FallLean = 1
+}
+
+local IdleConfig = {
+	Enabled = true, IdleThreshold = 0.1,
+	RotationX = math.rad(-10), RotationY = math.rad(-20), RotationZ = math.rad(0),
+	Smooth = 8
+}
+
+local WalkSwayConfig = {
+	Enabled = true, Amount = math.rad(8), YawAmount = math.rad(7), BobAmount = 0.35, HipBob = 0.06,
+	PitchAmount = math.rad(2.5), StepLength = 14, MinSpeed = 2, FullSpeed = 16, Smooth = 10, HipSmooth = 10
+}
+
+local idleX, idleY, idleZ = 0, 0, 0
+local gaitPhase, swayZ, swayY, bobOffset = 0, 0, 0, 0
+local defaultHipHeight = humanoid.HipHeight
+local currentHipHeight = defaultHipHeight
+
+local WalkTiltFrames = {
+	{ Time = 0.5, RX = -30, RY = 3, RZ = 0 },
+	{ Time = 0.4, RX = -25, RY = -3, RZ = 0 },
+	{ Time = 1.8, RX = -30, RY = 3, RZ = 0 },
+}
+local galeFrame = 1
+local galeFrameStart = tick()
+local galeRX, galeRY, galeRZ = 0, 0, 0
+local wasGaleMoving = false
+local galeStopping = false
+local galeStopStart = 0
+local galeLastRX, galeLastRY, galeLastRZ = 0, 0, 0
+
+local rayParams = RaycastParams.new()
+rayParams.FilterType = Enum.RaycastFilterType.Exclude
+rayParams.FilterDescendantsInstances = {character}
+
+RunService.Heartbeat:Connect(function(dt)
+	if humanoid.Health <= 0 then return end
+	
+	if not movementActive then
+		if galeTrack and galeTrack.IsPlaying then
+			galeTrack:Stop(0.3)
+		end
+		wasGaleMoving = false
+		galeStopping = false
+		sprintTrail.Enabled = false
+		return
+	end
+
+	local velocity = (hrp.Position - lastPos) / math.max(dt, 1 / 60)
+	lastPos = hrp.Position
+	local planarSpeed = Vector2.new(velocity.X, velocity.Z).Magnitude
+	local moving = planarSpeed > 0.1
+
+	if galeTrack then
+		if isGaleRunning and moving then
+			if not galeTrack.IsPlaying then
+				galeTrack:Play(0.3)
+				galeTrack.TimePosition = 0.2
+				galeTrack:AdjustSpeed(0)
+			end
+		else
+			if galeTrack.IsPlaying then
+				galeTrack:Stop(0.3)
+			end
+		end
+	end
+
+	sprintTrail.Enabled = isGaleRunning and moving
+
+	if isGaleRunning and moving then
+		if not wasGaleMoving then
+			wasGaleMoving = true
+			galeStopping = false
+			galeFrame = 1
+			galeFrameStart = tick()
+		end
+
+		local current = WalkTiltFrames[galeFrame]
+		local prevIndex = galeFrame - 1
+		if prevIndex < 1 then prevIndex = #WalkTiltFrames end
+		local previous = WalkTiltFrames[prevIndex]
+
+		local alpha = math.clamp((tick() - galeFrameStart) / current.Time, 0, 1)
+		galeRX = lerp(previous.RX, current.RX, alpha)
+		galeRY = lerp(previous.RY, current.RY, alpha)
+		galeRZ = lerp(previous.RZ, current.RZ, alpha)
+
+		if alpha >= 1 then
+			galeFrame += 1
+			if galeFrame > #WalkTiltFrames then galeFrame = 1 end
+			galeFrameStart = tick()
+		end
+	elseif wasGaleMoving then
+		wasGaleMoving = false
+		galeStopping = true
+		galeStopStart = tick()
+		galeLastRX, galeLastRY, galeLastRZ = galeRX, galeRY, galeRZ
+	end
+
+	if galeStopping then
+		local alpha = math.clamp((tick() - galeStopStart) / 0.3, 0, 1)
+		galeRX = lerp(galeLastRX, 0, alpha)
+		galeRY = lerp(galeLastRY, 0, alpha)
+		galeRZ = lerp(galeLastRZ, 0, alpha)
+		if alpha >= 1 then galeStopping = false end
+	elseif not (isGaleRunning and moving) then
+		galeRX, galeRY, galeRZ = 0, 0, 0
+	end
+
+	local targetSlope = 0
+	local ray = Workspace:Raycast(hrp.Position, Vector3.new(0, -10, 0), rayParams)
+
+	if ray and ray.Instance and ray.Instance.CanCollide then
+		targetSlope = -hrp.CFrame.LookVector:Dot(ray.Normal) * SLOPE_MAX * 1.5
+	end
+
+	if humanoid.Sit then targetSlope *= 2 end
+	slopeTilt += (targetSlope - slopeTilt) * dt * SMOOTH
+
+	local targetX, targetZ = 0, 0
+	local moveDir = humanoid.MoveDirection
+	local targetIdleX, targetIdleY, targetIdleZ = 0, 0, 0
+
+	if IdleConfig.Enabled and planarSpeed < IdleConfig.IdleThreshold then
+		targetIdleX = IdleConfig.RotationX
+		targetIdleY = IdleConfig.RotationY
+		targetIdleZ = IdleConfig.RotationZ
+	end
+
+	idleX += (targetIdleX - idleX) * dt * IdleConfig.Smooth
+	idleY += (targetIdleY - idleY) * dt * IdleConfig.Smooth
+	idleZ += (targetIdleZ - idleZ) * dt * IdleConfig.Smooth
+
+	local baseTilt = humanoid.Sit and SIT_TILT_MAX or MOVE_TILT_MAX
+
+	if planarSpeed > 0.1 then
+		local forwardDot = moveDir:Dot(hrp.CFrame.LookVector)
+		local moveMultiplier = (planarSpeed < 16) and LeanConfig.WalkLean or LeanConfig.RunLean
+		if forwardDot < 0 then moveMultiplier *= LeanConfig.BackwardsLean end
+
+		targetX = -forwardDot * baseTilt * moveMultiplier
+		local rightDot = moveDir:Dot(hrp.CFrame.RightVector)
+		if rightDot > 0 then
+			targetZ = -rightDot * baseTilt * LeanConfig.RightLean
+		else
+			targetZ = -rightDot * baseTilt * LeanConfig.LeftLean
+		end
+	end
+
+	local intensity = math.clamp(velocity.Y / 50, -1, 1)
+	local targetY
+	if velocity.Y > 0 then
+		targetY = intensity * VERTICAL_UP_TILT * LeanConfig.JumpLean
+	else
+		targetY = intensity * VERTICAL_DOWN_TILT * LeanConfig.FallLean
+	end
+
+	if humanoid.Sit then targetY *= 2 end
+
+	tiltX += (targetX - tiltX) * dt * SMOOTH
+	tiltY += (targetY - tiltY) * dt * SMOOTH
+	tiltZ += (targetZ - tiltZ) * dt * SMOOTH
+
+	if WalkSwayConfig.Enabled and not humanoid.Sit then
+		gaitPhase += (planarSpeed * dt) / WalkSwayConfig.StepLength
+		local swayIntensity = math.clamp((planarSpeed - WalkSwayConfig.MinSpeed) / (WalkSwayConfig.FullSpeed - WalkSwayConfig.MinSpeed), 0, 1)
+		local wave = math.sin(gaitPhase * math.pi * 2)
+
+		local targetSwayZ = wave * WalkSwayConfig.Amount * swayIntensity
+		local targetSwayY = wave * WalkSwayConfig.YawAmount * swayIntensity
+		local targetBob = math.abs(wave) * WalkSwayConfig.BobAmount * swayIntensity
+		local targetHip = defaultHipHeight - (math.abs(wave) * WalkSwayConfig.HipBob * swayIntensity)
+
+		swayZ += (targetSwayZ - swayZ) * dt * WalkSwayConfig.Smooth
+		swayY += (targetSwayY - swayY) * dt * WalkSwayConfig.Smooth
+		bobOffset += (targetBob - bobOffset) * dt * WalkSwayConfig.Smooth
+
+		currentHipHeight += (targetHip - currentHipHeight) * dt * WalkSwayConfig.HipSmooth
+		humanoid.HipHeight = currentHipHeight
+	else
+		swayZ += (0 - swayZ) * dt * WalkSwayConfig.Smooth
+		swayY += (0 - swayY) * dt * WalkSwayConfig.Smooth
+		bobOffset += (0 - bobOffset) * dt * WalkSwayConfig.Smooth
+
+		currentHipHeight += (defaultHipHeight - currentHipHeight) * dt * WalkSwayConfig.HipSmooth
+		humanoid.HipHeight = currentHipHeight
+	end
+
+	local targetYaw = currentYaw
+	if isShiftLock then
+		local cam = Workspace.CurrentCamera
+		if cam then targetYaw = math.atan2(-cam.CFrame.LookVector.X, -cam.CFrame.LookVector.Z) end
+	elseif moveDir.Magnitude > 0.1 then
+		targetYaw = math.atan2(-moveDir.X, -moveDir.Z)
+	end
+
+	currentYaw = lerpAngle(currentYaw, targetYaw, dt * (isShiftLock and 40 or 10))
+	moveAttachment.Position = Vector3.new(0, bobOffset, 0)
+
+	if isGaleRunning and (moving or galeStopping) then
+		moveAlign.CFrame =
+			CFrame.Angles(0, currentYaw + swayY, 0) *
+			CFrame.Angles(math.rad(galeRX) + (tiltY + slopeTilt + (math.sin(gaitPhase * math.pi * 2) * WalkSwayConfig.PitchAmount)), math.rad(galeRY), math.rad(galeRZ)) *
+			CFrame.Angles(tiltX, 0, tiltZ + swayZ) *
+			CFrame.Angles(idleX, idleY, idleZ)
+	else
+		moveAlign.CFrame =
+			CFrame.Angles(0, currentYaw + swayY, 0) *
+			CFrame.Angles(tiltY + slopeTilt + (math.sin(gaitPhase * math.pi * 2) * WalkSwayConfig.PitchAmount), 0, 0) *
+			CFrame.Angles(tiltX, 0, tiltZ + swayZ) *
+			CFrame.Angles(idleX, idleY, idleZ)
+	end
+end)
+
+task.spawn(function()
+	local tweenInfo = TweenInfo.new(1, Enum.EasingStyle.Sine, Enum.EasingDirection.InOut)
+	while humanoid.Parent and humanoid.Health > 0 do
+		TweenService:Create(humanoid, tweenInfo, { HipHeight = 0.1 }):Play()
+		task.wait(1)
+		TweenService:Create(humanoid, tweenInfo, { HipHeight = -0.2 }):Play()
+		task.wait(1)
+	end
+end)
+
+local playerGui = player:WaitForChild("PlayerGui")
+combatGui.Parent = playerGui
+
+local getAsset = getcustomasset or getsynasset
+
+local function loadGitHubImage(url, fileName)
+	local success, result = pcall(function()
+		if not isfile(fileName) then
+			local imgData = game:HttpGet(url)
+			writefile(fileName, imgData)
+		end
+		return getAsset(fileName)
+	end)
+	if success then
+		return result
+	end
+	return ""
+end
+
+local customImages = {
+	Punch = loadGitHubImage("https://raw.githubusercontent.com/GUICLOUDS/Gale_Files/refs/heads/main/Untitled765_20260715120218.png", "CombatGui_Punch.png"),
+	Skill = loadGitHubImage("https://raw.githubusercontent.com/GUICLOUDS/Gale_Files/refs/heads/main/Untitled762_20260715115354.png", "CombatGui_Skill.png"),
+	Skill2 = loadGitHubImage("https://raw.githubusercontent.com/GUICLOUDS/Gale_Files/refs/heads/main/Untitled763_20260715115810.png", "CombatGui_Skill2.png"),
+	Skill3 = loadGitHubImage("https://raw.githubusercontent.com/GUICLOUDS/Gale_Files/refs/heads/main/Untitled769_20260715135030.png", "CombatGui_Skill3.png"),
+	Sprint = loadGitHubImage("https://raw.githubusercontent.com/GUICLOUDS/Gale_Files/refs/heads/main/Untitled767_20260715121837.png", "CombatGui_Sprint.png"),
+	Jump = loadGitHubImage("https://raw.githubusercontent.com/GUICLOUDS/Gale_Files/refs/heads/main/Untitled766_20260715120558.png", "CombatGui_Jump.png")
+}
+
+local function applyButtonEffects(button)
+	local uiCorner = Instance.new("UICorner")
+	uiCorner.CornerRadius = UDim.new(0.15, 0)
+	uiCorner.Parent = button
+
+	local originalSize = button.Size
+	local shrinkSize = UDim2.new(
+		originalSize.X.Scale, originalSize.X.Offset * 0.85,
+		originalSize.Y.Scale, originalSize.Y.Offset * 0.85
+	)
+
+	local tweenInfo = TweenInfo.new(0.1, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
+	local shrinkTween = TweenService:Create(button, tweenInfo, {Size = shrinkSize})
+	local growTween = TweenService:Create(button, tweenInfo, {Size = originalSize})
+
+	button.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			shrinkTween:Play()
+		end
+	end)
+
+	button.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			growTween:Play()
+		end
+	end)
+
+	button.MouseLeave:Connect(function()
+		growTween:Play()
+	end)
+end
+
+local mainAnchor = Instance.new("Frame")
+mainAnchor.Name = "TouchCluster"
+mainAnchor.Size = UDim2.new(0, 300, 0, 300)
+mainAnchor.Position = UDim2.new(1, -25, 1, -25)
+mainAnchor.AnchorPoint = Vector2.new(1, 1)
+mainAnchor.BackgroundTransparency = 1
+mainAnchor.Parent = combatGui
+
+local punchButton = Instance.new("ImageButton")
+punchButton.Name = "PunchButton"
+punchButton.Size = UDim2.new(0, 110, 0, 110)
+punchButton.Position = UDim2.new(1, -55, 1, -55)
+punchButton.AnchorPoint = Vector2.new(0.5, 0.5)
+punchButton.BackgroundTransparency = 1
+punchButton.Image = customImages.Punch
+punchButton.Parent = mainAnchor
+
+local punchLabel = Instance.new("TextLabel")
+punchLabel.Size = UDim2.new(1, 0, 1, 0)
+punchLabel.BackgroundTransparency = 1
+punchLabel.Text = ""
+punchLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+punchLabel.Font = Enum.Font.SourceSansLight
+punchLabel.TextSize = 30
+punchLabel.Parent = punchButton
+
+local skillButton = Instance.new("ImageButton")
+skillButton.Name = "SkillButton"
+skillButton.Size = UDim2.new(0, 70, 0, 70)
+skillButton.Position = UDim2.new(1, -160, 1, -35)
+skillButton.AnchorPoint = Vector2.new(0.5, 0.5)
+skillButton.BackgroundTransparency = 1
+skillButton.Image = customImages.Skill
+skillButton.Parent = mainAnchor
+
+local skillLabel = Instance.new("TextLabel")
+skillLabel.Size = UDim2.new(1, 0, 1, 0)
+skillLabel.BackgroundTransparency = 1
+skillLabel.Text = ""
+skillLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+skillLabel.Font = Enum.Font.SourceSansLight
+skillLabel.TextSize = 25
+skillLabel.Parent = skillButton
+
+local skill2Button = Instance.new("ImageButton")
+skill2Button.Name = "Skill2Button"
+skill2Button.Size = UDim2.new(0, 70, 0, 70)
+skill2Button.Position = UDim2.new(1, -235, 1, -35)
+skill2Button.AnchorPoint = Vector2.new(0.5, 0.5)
+skill2Button.BackgroundTransparency = 1
+skill2Button.Image = customImages.Skill2
+skill2Button.Parent = mainAnchor
+
+local skill2Label = Instance.new("TextLabel")
+skill2Label.Size = UDim2.new(1, 0, 1, 0)
+skill2Label.BackgroundTransparency = 1
+skill2Label.Text = ""
+skill2Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+skill2Label.Font = Enum.Font.SourceSansLight
+skill2Label.TextSize = 25
+skill2Label.Parent = skill2Button
+
+local skill3Button = Instance.new("ImageButton")
+skill3Button.Name = "Skill3Button"
+skill3Button.Size = UDim2.new(0, 70, 0, 70)
+skill3Button.Position = UDim2.new(1, -235, 1, -120)
+skill3Button.AnchorPoint = Vector2.new(0.5, 0.5)
+skill3Button.BackgroundTransparency = 1
+skill3Button.Image = customImages.Skill3
+skill3Button.Parent = mainAnchor
+
+local skill3Label = Instance.new("TextLabel")
+skill3Label.Size = UDim2.new(1, 0, 1, 0)
+skill3Label.BackgroundTransparency = 1
+skill3Label.Text = ""
+skill3Label.TextColor3 = Color3.fromRGB(255, 255, 255)
+skill3Label.Font = Enum.Font.SourceSansLight
+skill3Label.TextSize = 25
+skill3Label.Parent = skill3Button
+
+local galeButton = Instance.new("ImageButton")
+galeButton.Name = "GaleButton"
+galeButton.Size = UDim2.new(0, 70, 0, 70)
+galeButton.Position = UDim2.new(1, -160, 1, -120)
+galeButton.AnchorPoint = Vector2.new(0.5, 0.5)
+galeButton.BackgroundTransparency = 1
+galeButton.ImageColor3 = Color3.fromRGB(100, 100, 100)
+galeButton.Image = customImages.Sprint
+galeButton.Parent = mainAnchor
+
+local jumpButtonUI = Instance.new("ImageButton")
+jumpButtonUI.Name = "JumpButton"
+jumpButtonUI.Size = UDim2.new(0, 70, 0, 70)
+jumpButtonUI.Position = UDim2.new(1, -55, 1, -160)
+jumpButtonUI.AnchorPoint = Vector2.new(0.5, 0.5)
+jumpButtonUI.BackgroundTransparency = 1
+jumpButtonUI.Image = customImages.Jump
+jumpButtonUI.Parent = mainAnchor
+
+local jumpLabel = Instance.new("TextLabel")
+jumpLabel.Size = UDim2.new(1, 0, 1, 0)
+jumpLabel.BackgroundTransparency = 1
+jumpLabel.Text = ""
+jumpLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+jumpLabel.Font = Enum.Font.SourceSansLight
+jumpLabel.TextSize = 25
+jumpLabel.Parent = jumpButtonUI
+
+applyButtonEffects(punchButton)
+applyButtonEffects(skillButton)
+applyButtonEffects(skill2Button)
+applyButtonEffects(skill3Button)
+applyButtonEffects(galeButton)
+applyButtonEffects(jumpButtonUI)
+
+if not UserInputService.TouchEnabled then
+	galeButton.Visible = false
+	jumpButtonUI.Visible = false
+end
+
+local function handlePunch()
+	if isAttacking or punchCooldown or humanoid.Health <= 0 then return end
+	isAttacking = true
+	lastPunchTime = tick()
+
+	if isGaleRunning then
+		executeM3()
+		isAttacking = false
+
+		punchCooldown = true
+		punchButton.ImageColor3 = Color3.fromRGB(100, 100, 100)
+		local cooldownStart = tick()
+		while tick() - cooldownStart < 0.7 and humanoid.Health > 0 do
+			punchLabel.Text = string.format("%.1fs", 0.7 - (tick() - cooldownStart))
+			task.wait()
+		end
+		punchLabel.Text = ""
+		punchButton.ImageColor3 = Color3.fromRGB(255, 255, 255)
+		punchCooldown = false
+	else
+		if comboIndex == 1 then
+			executeM1()
+			if humanoid.Health > 0 then comboIndex = 2 end
+			isAttacking = false
+		elseif comboIndex == 2 then
+			executeM2()
+			if humanoid.Health > 0 then comboIndex = 3 end
+			isAttacking = false
+		elseif comboIndex == 3 then
+			executeM3()
+			comboIndex = 1
+			isAttacking = false
+
+			punchCooldown = true
+			punchButton.ImageColor3 = Color3.fromRGB(100, 100, 100)
+			local cooldownStart = tick()
+			while tick() - cooldownStart < 0.7 and humanoid.Health > 0 do
+				punchLabel.Text = string.format("%.1fs", 0.7 - (tick() - cooldownStart))
+				task.wait()
+			end
+			punchLabel.Text = ""
+			punchButton.ImageColor3 = Color3.fromRGB(255, 255, 255)
+			punchCooldown = false
+		end
+	end
+end
+
+local function handleSkill1()
+	if isAttacking or skillCooldown or humanoid.Health <= 0 then return end
+	isAttacking = true
+	skillCooldown = true
+	skillButton.ImageColor3 = Color3.fromRGB(100, 100, 100)
+
+	executeSkill1()
+
+	isAttacking = false
+
+	local cooldownStart = tick()
+	while tick() - cooldownStart < 4 and humanoid.Health > 0 do
+		skillLabel.Text = string.format("%.1fs", 4 - (tick() - cooldownStart))
+		task.wait()
+	end
+
+	skillLabel.Text = ""
+	skillButton.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	skillCooldown = false
+end
+
+local function handleSkill2()
+	if isAttacking or skill2Cooldown or humanoid.Health <= 0 then return end
+	isAttacking = true
+	skill2Cooldown = true
+	skill2Button.ImageColor3 = Color3.fromRGB(100, 100, 100)
+
+	executeSkill2()
+
+	isAttacking = false
+
+	local cooldownStart = tick()
+	while tick() - cooldownStart < 4.6 and humanoid.Health > 0 do
+		skill2Label.Text = string.format("%.1fs", 4.6 - (tick() - cooldownStart))
+		task.wait()
+	end
+
+	skill2Label.Text = ""
+	skill2Button.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	skill2Cooldown = false
+end
+
+local function handleSkill3()
+	if isAttacking or skill3Cooldown or humanoid.Health <= 0 then return end
+	isAttacking = true
+	skill3Cooldown = true
+	skill3Button.ImageColor3 = Color3.fromRGB(100, 100, 100)
+
+	executeSkill3()
+
+	isAttacking = false
+
+	local cooldownStart = tick()
+	while tick() - cooldownStart < 5 and humanoid.Health > 0 do
+		skill3Label.Text = string.format("%.1fs", 5 - (tick() - cooldownStart))
+		task.wait()
+	end
+
+	skill3Label.Text = ""
+	skill3Button.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	skill3Cooldown = false
+end
+
+local sprintLandBoostActive = false
+local sprintLandBoostMultiplier = 1.75
+local sprintLandBoostDuration = 1.4
+local sprintLandBoostMaxSpeed = 55
+local sprintBoostToken = 0
+local sprintBoostTrailCleanup = nil
+
+local function endSprintLandingBoost()
+	if not sprintLandBoostActive then return end
+	sprintBoostToken += 1
+	if sprintBoostTrailCleanup then
+		sprintBoostTrailCleanup()
+		sprintBoostTrailCleanup = nil
+	end
+	if humanoid.Health > 0 then
+		humanoid.WalkSpeed = isGaleRunning and galeRunSpeed or baseWalkSpeed
+	end
+	sprintLandBoostActive = false
+end
+
+local function spawnGroundExplosionDebris(cf, color)
+	local groundPos = cf.Position
+
+	local crater = Instance.new("Part")
+	crater.Anchored = true
+	crater.CanCollide = false
+	crater.CanQuery = false
+	crater.CanTouch = false
+	crater.Material = Enum.Material.Neon
+	crater.Color = color
+	crater.Shape = Enum.PartType.Cylinder
+	crater.Size = Vector3.new(0.2, 1, 1)
+	crater.CFrame = CFrame.new(groundPos) * CFrame.Angles(0, 0, math.rad(90))
+	crater.Transparency = 0.3
+	crater.Parent = Workspace
+
+	TweenService:Create(crater, TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.2, 14, 14),
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(crater, 0.7)
+
+	for _ = 1, 10 do
+		local chunk = Instance.new("Part")
+		chunk.Anchored = false
+		chunk.CanCollide = true
+		chunk.CanQuery = false
+		chunk.CanTouch = false
+		chunk.Material = Enum.Material.Slate
+		chunk.Color = Color3.fromRGB(
+			math.random(60, 90),
+			math.random(60, 90),
+			math.random(60, 90)
+		)
+		chunk.Size = Vector3.new(
+			math.random(4, 9) / 10,
+			math.random(4, 9) / 10,
+			math.random(4, 9) / 10
+		)
+		chunk.CFrame = CFrame.new(groundPos) * CFrame.new(
+			math.random(-10, 10) / 10,
+			math.random(0, 5) / 10,
+			math.random(-10, 10) / 10
+		) * CFrame.Angles(math.random(0, 360), math.random(0, 360), math.random(0, 360))
+		chunk.Parent = Workspace
+
+		local dir = Vector3.new(
+			math.random(-100, 100),
+			math.random(50, 130),
+			math.random(-100, 100)
+		)
+		if dir.Magnitude == 0 then dir = Vector3.new(0, 1, 0) end
+		dir = dir.Unit
+
+		chunk.AssemblyLinearVelocity = dir * math.random(20, 42)
+		chunk.AssemblyAngularVelocity = Vector3.new(
+			math.random(-14, 14),
+			math.random(-14, 14),
+			math.random(-14, 14)
+		)
+
+		task.delay(0.5, function()
+			if chunk.Parent then
+				TweenService:Create(chunk, TweenInfo.new(0.4, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+					Transparency = 1,
+				}):Play()
+			end
+		end)
+
+		Debris:AddItem(chunk, 1.4)
+	end
+
+	local dustPart = Instance.new("Part")
+	dustPart.Anchored = true
+	dustPart.CanCollide = false
+	dustPart.CanQuery = false
+	dustPart.CanTouch = false
+	dustPart.Transparency = 1
+	dustPart.Size = Vector3.new(0.2, 0.2, 0.2)
+	dustPart.CFrame = cf
+	dustPart.Parent = Workspace
+
+	local dust = Instance.new("ParticleEmitter")
+	dust.Texture = EffectTextures.Smoke
+	dust.Color = ColorSequence.new(color)
+	dust.Size = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 2),
+		NumberSequenceKeypoint.new(1, 6),
+	})
+	dust.Transparency = NumberSequence.new({
+		NumberSequenceKeypoint.new(0, 0.5),
+		NumberSequenceKeypoint.new(1, 1),
+	})
+	dust.LightInfluence = 1
+	dust.Lifetime = NumberRange.new(0.6, 1.1)
+	dust.Speed = NumberRange.new(3, 9)
+	dust.SpreadAngle = Vector2.new(180, 180)
+	dust.Rate = 0
+	dust.Parent = dustPart
+	dust:Emit(18)
+
+	Debris:AddItem(dustPart, 1.5)
+end
+
+local function spawnSonicBoomEffect(cf, lookVector)
+	lookVector = (lookVector and lookVector.Magnitude > 0) and lookVector or Vector3.new(0, 0, -1)
+
+	screenShake(0.4, 4.5)
+	cameraPunch(14, 0.4)
+	screenFlash(Color3.fromRGB(255, 255, 255), 0.4, 0.28)
+	lightingPulse(0.55, 0.4, 2)
+
+	local cone = Instance.new("Part")
+	cone.Anchored = true
+	cone.CanCollide = false
+	cone.CanQuery = false
+	cone.CanTouch = false
+	cone.Material = Enum.Material.ForceField
+	cone.Color = Color3.fromRGB(230, 240, 255)
+	cone.Shape = Enum.PartType.Cylinder
+	cone.Size = Vector3.new(0.4, 2, 2)
+	cone.CFrame = CFrame.new(cf.Position, cf.Position + lookVector) * CFrame.Angles(0, 0, math.rad(90))
+	cone.Transparency = 0.15
+	cone.Parent = Workspace
+
+	TweenService:Create(cone, TweenInfo.new(0.5, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+		Size = Vector3.new(0.4, 30, 30),
+		Transparency = 1,
+	}):Play()
+	Debris:AddItem(cone, 0.6)
+
+	spawnRing(cf.Position, Color3.fromRGB(255, 255, 255), 2, 22, 0.5)
+	task.delay(0.07, function()
+		spawnRing(cf.Position, Color3.fromRGB(200, 225, 255), 1.4, 17, 0.42)
+	end)
+
+	spawnImpactBurst(cf, Color3.fromRGB(255, 255, 255), 28, 1.5)
+	spawnDebris(cf, Color3.fromRGB(190, 195, 205), 16)
+	spawnGroundExplosionDebris(cf, Color3.fromRGB(210, 220, 235))
+	flashLight(cf.Position, Color3.fromRGB(255, 255, 255), 28, 11, 0.4)
+
+	local boom = Instance.new("Sound")
+	boom.SoundId = "rbxassetid://9125408660"
+	boom.Volume = 1.5
+	boom.PlaybackSpeed = math.random(92, 108) / 100
+	boom.Parent = hrp
+	boom:Play()
+	Debris:AddItem(boom, 3)
+end
+
+local function triggerSprintLandingBoost()
+	if sprintLandBoostActive or humanoid.Health <= 0 then return end
+	sprintLandBoostActive = true
+	sprintBoostToken += 1
+	local myToken = sprintBoostToken
+
+	local targetSpeed = math.min(
+		(isGaleRunning and galeRunSpeed or baseWalkSpeed) * sprintLandBoostMultiplier,
+		sprintLandBoostMaxSpeed
+	)
+	humanoid.WalkSpeed = targetSpeed
+
+	spawnSonicBoomEffect(hrp.CFrame * CFrame.new(0, -2.6, 0), hrp.CFrame.LookVector)
+
+	local kick = Instance.new("BodyVelocity")
+	kick.Velocity = hrp.CFrame.LookVector * (targetSpeed * 0.6)
+	kick.MaxForce = Vector3.new(40000, 0, 40000)
+	kick.P = 3000
+	kick.Parent = hrp
+	Debris:AddItem(kick, 0.2)
+
+	local boostTrail, boostTrailCleanup = attachTrail(
+		hrp,
+		Color3.fromRGB(255, 255, 255),
+		Vector3.new(0, 0.9, 0),
+		Vector3.new(0, -0.9, 0),
+		0.3,
+		NumberSequence.new({
+			NumberSequenceKeypoint.new(0, 0.6),
+			NumberSequenceKeypoint.new(1, 0),
+		})
+	)
+	sprintBoostTrailCleanup = boostTrailCleanup
+
+	task.delay(sprintLandBoostDuration, function()
+		if sprintBoostToken ~= myToken then return end
+		if boostTrailCleanup then boostTrailCleanup() end
+		sprintBoostTrailCleanup = nil
+		if humanoid.Health > 0 then
+			humanoid.WalkSpeed = isGaleRunning and galeRunSpeed or baseWalkSpeed
+		end
+		sprintLandBoostActive = false
+	end)
+end
+
+local function handleGaleJump()
+	if isAttacking or jumpCooldown or humanoid.Health <= 0 then return end
+	isAttacking = true
+	jumpCooldown = true
+	jumpButtonUI.ImageColor3 = Color3.fromRGB(100, 100, 100)
+	movementActive = false
+	humanoid.AutoRotate = false
+
+	local wasSprintingIntoJump = isGaleRunning
+
+	playAnimation("rbxassetid://97170520", 0.5, 0, 1, 3)
+
+	local leapDistance = 20
+	local leapHeight = 80
+
+	spawnRing(hrp.Position - Vector3.new(0, 3, 0), Color3.fromRGB(220, 220, 220), 1, 9, 0.4)
+	spawnImpactBurst(hrp.CFrame * CFrame.new(0, -2.5, 0), Color3.fromRGB(230, 230, 230), 14, 0.8)
+	spawnDebris(hrp.CFrame * CFrame.new(0, -2.5, 0), Color3.fromRGB(200, 200, 205), 6)
+	local jumpTrail, jumpTrailCleanup = attachTrail(
+		hrp,
+		Color3.fromRGB(235, 240, 255),
+		Vector3.new(0, 1.5, 0),
+		Vector3.new(0, -1.5, 0),
+		0.4
+	)
+	task.delay(1, jumpTrailCleanup)
+
+	local bodyVelocity = Instance.new("BodyVelocity")
+	bodyVelocity.Velocity = hrp.CFrame.LookVector * leapDistance + Vector3.new(0, leapHeight, 0)
+	bodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
+	bodyVelocity.P = 5000
+	bodyVelocity.Parent = hrp
+	Debris:AddItem(bodyVelocity, 0.1)
+
+	local attachment = Instance.new("Attachment")
+	attachment.Parent = hrp
+
+	local align = Instance.new("AlignOrientation")
+	align.Mode = Enum.OrientationAlignmentMode.OneAttachment
+	align.Attachment0 = attachment
+	align.MaxTorque = math.huge
+	align.Responsiveness = 200
+	align.RigidityEnabled = true
+	align.Parent = hrp
+
+	local Frames = {
+		{ Time = 0.5, RX = 40, RY = -30, RZ = 0 },
+		{ Time = 0.4, RX = -25, RY = 0, RZ = 0 },
+		{ Time = 0.2, RX = -30, RY = 1, RZ = 0 },
+		{ Time = 0.3, RX = 0, RY = 0, RZ = 0 }
+	}
+
+	local currentYaw = math.rad(hrp.Orientation.Y)
+	local frame = 1
+	local frameStart = tick()
+	local done = false
+	local jumpStartTime = tick()
+
+	local groundCheckParams = RaycastParams.new()
+	groundCheckParams.FilterType = Enum.RaycastFilterType.Exclude
+	groundCheckParams.FilterDescendantsInstances = {character}
+
+	local connection
+	connection = RunService.Heartbeat:Connect(function(dt)
+		if humanoid.Health <= 0 or not align or not attachment then
+			connection:Disconnect()
+			done = true
+			return
+		end
+
+		local moveDir = humanoid.MoveDirection
+		local targetYaw = currentYaw
+
+		if moveDir.Magnitude > 0.01 then
+			targetYaw = math.atan2(-moveDir.X, -moveDir.Z)
+		end
+
+		currentYaw = lerpAngle(currentYaw, targetYaw, dt * 15)
+		local current = Frames[frame]
+
+		if current then
+			local previous = Frames[frame - 1]
+			local startRX = previous and previous.RX or 0
+			local startRY = previous and previous.RY or 0
+			local startRZ = previous and previous.RZ or 0
+
+			local alpha = math.clamp((tick() - frameStart) / current.Time, 0, 1)
+			local rx = lerp(startRX, current.RX, alpha)
+			local ry = lerp(startRY, current.RY, alpha)
+			local rz = lerp(startRZ, current.RZ, alpha)
+
+			align.CFrame = CFrame.Angles(0, currentYaw, 0) * CFrame.Angles(math.rad(rx), math.rad(ry), math.rad(rz))
+
+			if alpha >= 1 then
+				frame += 1
+				frameStart = tick()
+			end
+		else
+			local last = Frames[#Frames]
+			align.CFrame = CFrame.Angles(0, currentYaw, 0) * CFrame.Angles(math.rad(last.RX), math.rad(last.RY), math.rad(last.RZ))
+		end
+
+		if tick() - jumpStartTime > 0.15 then
+			local ray = Workspace:Raycast(hrp.Position, Vector3.new(0, -3.6, 0), groundCheckParams)
+			if ray and ray.Instance and ray.Instance.CanCollide and hrp.AssemblyLinearVelocity.Y <= 0.5 then
+				connection:Disconnect()
+				done = true
+			end
+		end
+	end)
+
+	while not done do task.wait() end
+
+	if align then align:Destroy() end
+	if attachment then attachment:Destroy() end
+	spawnRing(hrp.Position - Vector3.new(0, 3, 0), Color3.fromRGB(220, 220, 220), 1, 8, 0.35)
+	spawnDebris(hrp.CFrame * CFrame.new(0, -2.5, 0), Color3.fromRGB(200, 200, 205), 6)
+	screenFlash(Color3.fromRGB(230, 230, 235), 0.85, 0.15)
+	cameraPunch(3, 0.15)
+
+	if wasSprintingIntoJump then
+		triggerSprintLandingBoost()
+	end
+
+	humanoid.AutoRotate = true
+	movementActive = true
+	isAttacking = false
+
+	local cooldownDuration = 1.5
+	local cooldownStart = tick()
+	while tick() - cooldownStart < cooldownDuration and humanoid.Health > 0 do
+		jumpLabel.Text = string.format("%.1fs", cooldownDuration - (tick() - cooldownStart))
+		task.wait()
+	end
+	jumpLabel.Text = ""
+	jumpButtonUI.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	jumpCooldown = false
+end
+
+local function toggleGaleRun()
+	if humanoid.Health <= 0 then return end
+	isGaleRunning = not isGaleRunning
+
+	if isGaleRunning then
+		if not sprintLandBoostActive then
+			humanoid.WalkSpeed = galeRunSpeed
+		end
+		galeButton.ImageColor3 = Color3.fromRGB(255, 255, 255)
+	else
+		endSprintLandingBoost()
+		humanoid.WalkSpeed = baseWalkSpeed
+		galeButton.ImageColor3 = Color3.fromRGB(100, 100, 100)
+	end
+end
+
+punchButton.Activated:Connect(handlePunch)
+skillButton.Activated:Connect(handleSkill1)
+skill2Button.Activated:Connect(handleSkill2)
+skill3Button.Activated:Connect(handleSkill3)
+galeButton.Activated:Connect(toggleGaleRun)
+jumpButtonUI.Activated:Connect(handleGaleJump)
+
+UserInputService.InputBegan:Connect(function(input, gp)
+	if gp or humanoid.Health <= 0 then return end
+	if input.KeyCode == Enum.KeyCode.LeftShift or input.KeyCode == Enum.KeyCode.RightShift then
+		isShiftLock = not isShiftLock
+	elseif input.UserInputType == Enum.UserInputType.MouseButton1 then
+		handlePunch()
+	elseif input.KeyCode == Enum.KeyCode.E then
+		handleSkill1()
+	elseif input.KeyCode == Enum.KeyCode.R then
+		handleSkill2()
+	elseif input.KeyCode == Enum.KeyCode.T then
+		handleSkill3()
+	elseif input.KeyCode == Enum.KeyCode.Q then
+		toggleGaleRun()
+	elseif input.KeyCode == Enum.KeyCode.Space then
+		handleGaleJump()
+	end
+end)
+
+task.spawn(function()
+	while humanoid.Health > 0 do
+		task.wait(0.2)
+		if tick() - lastPunchTime >= 4 and comboIndex > 1 and not isAttacking and not punchCooldown then
+			comboIndex = 1
+		end
+	end
+end)
+
+local antiflingEnabled = false
+local antiflingFrame = Instance.new("Frame")
+antiflingFrame.Name = "AntiflingFrame"
+antiflingFrame.Size = UDim2.new(0, 150, 0, 80)
+antiflingFrame.Position = UDim2.new(0.1, 0, 0.1, 0)
+antiflingFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+antiflingFrame.BorderSizePixel = 0
+antiflingFrame.Active = true
+antiflingFrame.Parent = combatGui
+
+local frameCorner = Instance.new("UICorner")
+frameCorner.CornerRadius = UDim.new(0.15, 0)
+frameCorner.Parent = antiflingFrame
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Name = "Title"
+titleLabel.Size = UDim2.new(1, 0, 0.4, 0)
+titleLabel.Position = UDim2.new(0, 0, 0.1, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Anti-Fling"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.Font = Enum.Font.SourceSansBold
+titleLabel.TextSize = 16
+titleLabel.Parent = antiflingFrame
+
+local toggleButton = Instance.new("TextButton")
+toggleButton.Name = "ToggleButton"
+toggleButton.Size = UDim2.new(0.8, 0, 0.35, 0)
+toggleButton.Position = UDim2.new(0.1, 0, 0.55, 0)
+toggleButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+toggleButton.Text = "OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.Font = Enum.Font.SourceSansBold
+toggleButton.TextSize = 14
+toggleButton.Parent = antiflingFrame
+
+local buttonCorner = Instance.new("UICorner")
+buttonCorner.CornerRadius = UDim.new(0.2, 0)
+buttonCorner.Parent = toggleButton
+
+toggleButton.MouseButton1Click:Connect(function()
+	antiflingEnabled = not antiflingEnabled
+	if antiflingEnabled then
+		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 180, 50)
+		toggleButton.Text = "ON"
+	else
+		toggleButton.BackgroundColor3 = Color3.fromRGB(180, 50, 50)
+		toggleButton.Text = "OFF"
+	end
+end)
+
+local dragging = false
+local dragInput
+local dragStart
+local startPos
+
+local function update(input)
+	local delta = input.Position - dragStart
+	antiflingFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+end
+
+antiflingFrame.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = antiflingFrame.Position
+
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+antiflingFrame.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		update(input)
+	end
+end)
+
+task.spawn(function()
+	while true do
+		task.wait()
+		if antiflingEnabled then
+			pcall(function()
+				for _, otherPlayer in ipairs(Players:GetPlayers()) do
+					if otherPlayer ~= player and otherPlayer.Character then
+						for _, part in ipairs(otherPlayer.Character:GetDescendants()) do
+							if part:IsA("BasePart") then
+								part.CanCollide = false
+								part.Velocity = Vector3.new(0, 0, 0)
+								part.RotVelocity = Vector3.new(0, 0, 0)
+							end
+						end
+					end
+				end
+			end)
+		end
+	end
+end)
