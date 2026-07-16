@@ -1370,6 +1370,31 @@ local function executeSkill3()
 		humanoid.Sit = false
 	end
 
+	-- Face toward the nearest target before the punch and dash fire
+	do
+		local faceTarget = nil
+		local faceDist = math.huge
+		for _, plr in ipairs(Players:GetPlayers()) do
+			if plr ~= player and plr.Character then
+				local root = plr.Character:FindFirstChild("HumanoidRootPart")
+				if root then
+					local dist = (root.Position - hrp.Position).Magnitude
+					if dist <= 60 and dist < faceDist then
+						faceTarget = root
+						faceDist = dist
+					end
+				end
+			end
+		end
+		if faceTarget then
+			local targetPos = faceTarget.Position * Vector3.new(1, 0, 1) + Vector3.new(0, hrp.Position.Y, 0)
+			hrp.CFrame = CFrame.lookAt(hrp.Position, targetPos)
+			-- Update currentYaw so the align loop stays in sync
+			local _, newY, _ = hrp.CFrame:ToEulerAnglesYXZ()
+			currentYaw = newY
+		end
+	end
+
 	playPunchEffect(1, 0.8, 6, 0.25, 0.35)
 	spawnSlashArc(hrp.CFrame * CFrame.new(0, 0.5, -2), Color3.fromRGB(255, 140, 80), 6)
 
@@ -2141,12 +2166,90 @@ local function spawnSonicBoomEffect(cf, lookVector)
 	flashLight(cf.Position, Color3.fromRGB(255, 255, 255), 28, 11, 0.4)
 
 	local boom = Instance.new("Sound")
-	boom.SoundId = "rbxassetid://9125408660"
+	boom.SoundId = "rbxassetid://100261872009811"
 	boom.Volume = 1.5
 	boom.PlaybackSpeed = math.random(92, 108) / 100
 	boom.Parent = hrp
 	boom:Play()
 	Debris:AddItem(boom, 3)
+
+	-- Blast out all no-collision parts/models in radius using sethiddenproperty radius
+	task.spawn(function()
+		local blastOrigin = cf.Position
+		local blastRadius = 30
+		local blastForce = 120
+
+		-- Use a hidden-property sphere probe to define the blast radius
+		local radiusPart = Instance.new("Part")
+		radiusPart.Anchored = true
+		radiusPart.CanCollide = false
+		radiusPart.CanQuery = false
+		radiusPart.CanTouch = false
+		radiusPart.Transparency = 1
+		radiusPart.Size = Vector3.new(0.1, 0.1, 0.1)
+		radiusPart.Position = blastOrigin
+		radiusPart.Parent = Workspace
+		pcall(function()
+			sethiddenproperty(radiusPart, "radius", blastRadius)
+		end)
+
+		local overlapParams = OverlapParams.new()
+		overlapParams.FilterType = Enum.RaycastFilterType.Exclude
+		overlapParams.FilterDescendantsInstances = { character }
+
+		local partsInRadius = Workspace:GetPartBoundsInRadius(blastOrigin, blastRadius, overlapParams)
+
+		local blasted = {}
+
+		for _, part in ipairs(partsInRadius) do
+			if not part:IsA("BasePart") then continue end
+			-- Only target parts with no collision
+			if part.CanCollide then continue end
+			-- Skip anchored parts (e.g. terrain decorations we don't want flying)
+			-- but allow unanchored or model parts
+			local alreadyBlasted = blasted[part]
+			if alreadyBlasted then continue end
+			blasted[part] = true
+
+			local dir = (part.Position - blastOrigin)
+			if dir.Magnitude < 0.01 then
+				dir = Vector3.new(math.random(-10,10), math.random(5,10), math.random(-10,10))
+			end
+			dir = dir.Unit
+
+			local dist = (part.Position - blastOrigin).Magnitude
+			local falloff = math.clamp(1 - (dist / blastRadius), 0.15, 1)
+			local impulse = dir * blastForce * falloff + Vector3.new(0, blastForce * 0.4 * falloff, 0)
+
+			pcall(function()
+				if part.Anchored then
+					-- Temporarily unanchor and give velocity, then re-anchor after a moment
+					part.Anchored = false
+					part.AssemblyLinearVelocity = impulse
+					part.AssemblyAngularVelocity = Vector3.new(
+						math.random(-8, 8),
+						math.random(-8, 8),
+						math.random(-8, 8)
+					)
+					task.delay(2.5, function()
+						if part and part.Parent then
+							part.Anchored = true
+							part.AssemblyLinearVelocity = Vector3.zero
+						end
+					end)
+				else
+					part.AssemblyLinearVelocity = impulse
+					part.AssemblyAngularVelocity = Vector3.new(
+						math.random(-8, 8),
+						math.random(-8, 8),
+						math.random(-8, 8)
+					)
+				end
+			end)
+		end
+
+		Debris:AddItem(radiusPart, 0.1)
+	end)
 end
 
 local function triggerSprintLandingBoost()
@@ -2195,6 +2298,10 @@ local function triggerSprintLandingBoost()
 end
 
 local function handleGaleJump()
+	if humanoid.Sit then
+		humanoid.Sit = false
+		return
+	end
 	if isAttacking or jumpCooldown or humanoid.Health <= 0 then return end
 	isAttacking = true
 	jumpCooldown = true
