@@ -932,7 +932,7 @@ local function executeSkill1()
 	for _, plr in ipairs(Players:GetPlayers()) do
 		if plr ~= player and plr.Character then
 			local root = plr.Character:FindFirstChild("HumanoidRootPart")
-			if root and (root.Position - hrp.Position).Magnitude <= 5 then
+			if root and (root.Position - hrp.Position).Magnitude <= 9 then
 				targetPlayer = plr
 				break
 			end
@@ -1246,13 +1246,83 @@ local function executeSkill3()
 	end)
 
 	playAnimation("rbxassetid://218504594", 0.5, 0.5, 0, 1.5)
-	
+
 	task.wait(1.5)
-	
+
 	playAnimation("rbxassetid://204062532", 0.5, 0, 1, 1)
-	
+
 	task.wait(0.2)
-	
+
+	-- Detect closest nearby player for pre-dash attach
+	local skill3TargetPlayer = nil
+	local skill3TargetRoot = nil
+	local skill3TargetDist = math.huge
+	for _, plr in ipairs(Players:GetPlayers()) do
+		if plr ~= player and plr.Character then
+			local root = plr.Character:FindFirstChild("HumanoidRootPart")
+			if root then
+				local dist = (root.Position - hrp.Position).Magnitude
+				if dist <= 12 and dist < skill3TargetDist then
+					skill3TargetPlayer = plr
+					skill3TargetRoot = root
+					skill3TargetDist = dist
+				end
+			end
+		end
+	end
+
+	-- If a target is nearby, snap to face them and lock position until the dash fires
+	local skill3AttachConnection
+	local skill3FaceY = currentYaw
+
+	if skill3TargetPlayer and skill3TargetRoot then
+		-- Kill the tilt-frame align so it doesn't fight manual CFrame override
+		if alignConnection then alignConnection:Disconnect() end
+		if align then align:Destroy(); align = nil end
+		if attachment then attachment:Destroy(); attachment = nil end
+
+		humanoid.Sit = true
+
+		local targetChar = skill3TargetPlayer.Character
+		local targetTorso = targetChar:FindFirstChild("UpperTorso") or targetChar:FindFirstChild("Torso")
+		local heightScale = targetTorso and (targetTorso.Size.Y / 2) or 1
+		local widthScale = targetTorso and ((targetTorso.Size.X / 2 + targetTorso.Size.Z / 2) / 2) or 1
+		local upOffset = -2 * heightScale
+		local distanceOffset = 2.3 * widthScale
+
+		local initialTargetPos = skill3TargetRoot.Position
+		local initialMyPos = hrp.Position
+		local direction = (initialMyPos - initialTargetPos) * Vector3.new(1, 0, 1)
+		if direction.Magnitude == 0 then direction = Vector3.new(0, 0, 1) end
+
+		local closeOffset = direction.Unit * distanceOffset
+		local heightOffset = Vector3.new(0, upOffset, 0)
+		local finalOffset = closeOffset + heightOffset
+
+		-- Face toward target
+		local faceTargetCFrame = CFrame.lookAt(
+			initialMyPos,
+			initialTargetPos * Vector3.new(1, 0, 1) + Vector3.new(0, initialMyPos.Y, 0)
+		)
+		local _, myY, _ = faceTargetCFrame:ToEulerAnglesYXZ()
+		skill3FaceY = myY
+
+		skill3AttachConnection = RunService.Heartbeat:Connect(function()
+			if humanoid.Health <= 0 or not targetChar or not skill3TargetRoot then
+				if skill3AttachConnection then skill3AttachConnection:Disconnect() end
+				return
+			end
+			pcall(function()
+				sethiddenproperty(hrp, "PhysicsRepRootPart", skill3TargetRoot)
+			end)
+
+			local basePosition = skill3TargetRoot.Position + finalOffset
+			hrp.CFrame = CFrame.new(basePosition) * CFrame.fromEulerAnglesYXZ(0, skill3FaceY, 0)
+			hrp.Velocity = Vector3.zero
+			hrp.RotVelocity = Vector3.zero
+		end)
+	end
+
 	local pushActive = true
 	task.spawn(function()
 		if not ReplicatedStorage:FindFirstChild("push") then
@@ -1260,7 +1330,7 @@ local function executeSkill3()
 			detection.Name = "push"
 			detection.Parent = ReplicatedStorage
 		end
-		
+
 		local lp = Players.LocalPlayer
 		local movel = 0.1
 
@@ -1281,19 +1351,28 @@ local function executeSkill3()
 				RunService.RenderStepped:Wait()
 				if pushHrp then pushHrp.Velocity = vel end
 				RunService.Stepped:Wait()
-				if pushHrp then 
+				if pushHrp then
 					pushHrp.Velocity = vel + Vector3.new(0, movel, 0)
 				end
 				movel = -movel
 			end
 		end
 	end)
-	
+
 	task.wait(0.3)
-	
+
+	-- Sound/effects fired; now release the attach and dash THROUGH the target
+	if skill3AttachConnection then
+		skill3AttachConnection:Disconnect()
+		skill3AttachConnection = nil
+	end
+	if humanoid.Sit then
+		humanoid.Sit = false
+	end
+
 	playPunchEffect(1, 0.8, 6, 0.25, 0.35)
 	spawnSlashArc(hrp.CFrame * CFrame.new(0, 0.5, -2), Color3.fromRGB(255, 140, 80), 6)
-	
+
 	local leapDistance = 50
 	local leapHeight = 0
 
@@ -1305,6 +1384,8 @@ local function executeSkill3()
 		0.5
 	)
 
+	-- Dash direction: hrp.CFrame.LookVector naturally faces the target after attach,
+	-- so this drives straight through them regardless of whether attach triggered
 	local bodyVelocity = Instance.new("BodyVelocity")
 	bodyVelocity.Velocity = hrp.CFrame.LookVector * leapDistance + Vector3.new(0, leapHeight, 0)
 	bodyVelocity.MaxForce = Vector3.new(100000, 100000, 100000)
@@ -1315,6 +1396,11 @@ local function executeSkill3()
 	task.wait(0.1)
 	pushActive = false
 	task.delay(0.5, dashTrailCleanup)
+
+	-- If we destroyed align early (attach happened), signal done manually
+	if not align then
+		done = true
+	end
 
 	while not done do task.wait() end
 
