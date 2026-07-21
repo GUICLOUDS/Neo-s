@@ -246,18 +246,11 @@ local function FirebaseDelete(path)
 end
 
 local function GetRoles(reqGender, accGender)
-    if reqGender == "F" and accGender == "M" then return "S", "D" end 
-    if reqGender == "M" and accGender == "F" then return "D", "S" end
-    if reqGender == "M" and accGender == "FF" then return "D", "S" end
-    if reqGender == "FF" and accGender == "M" then return "D", "S" end
-    if reqGender == "M" and accGender == "FB" then return "D", "S" end
-    if reqGender == "FB" and accGender == "M" then return "D", "S" end
-    if reqGender == "F" and accGender == "FF" then return "D", "S" end
-    if reqGender == "FF" and accGender == "F" then return "D", "S" end
-    if reqGender == "F" and accGender == "FB" then return "D", "S" end
-    if reqGender == "FB" and accGender == "F" then return "D", "S" end
-    if reqGender == "FB" and accGender == "FF" then return "D", "S" end
-    if reqGender == "FF" and accGender == "FB" then return "D", "S" end
+    -- If requester is F, requester is S and acceptor is D
+    if reqGender == "F" then 
+        return "S", "D" 
+    end 
+    -- For all other requester genders (M, FB, FF), requester is D and acceptor is S
     return "D", "S" 
 end
 
@@ -601,6 +594,7 @@ local isMorphed = false
 local ignoreRequests = false
 local showOverheadGui = true
 local spamCooldowns = {}
+local syncStartTime = 0 
 
 local currentAnimSpeed = 1.0
 local currentControl = localPlayer.Name
@@ -1203,6 +1197,7 @@ local function StartSyncLocal(partnerName, myNewRole)
     currentState = "Synced"
     syncPartner = partnerName
     myRole = myNewRole
+    syncStartTime = tick()
 
     local pPlayer = Players:FindFirstChild(partnerName)
     if pPlayer and pPlayer.Character and localPlayer.Character then DisableCollision(localPlayer.Character, pPlayer.Character) end
@@ -1352,7 +1347,10 @@ task.spawn(function()
         if currentState == "Synced" then
             local partnerData = syncPartner ~= "" and FirebaseGet("Players/" .. syncPartner) or nil
             
-            if myData.Status == "Idle" or not partnerData or partnerData.Status == "Idle" or not Players:FindFirstChild(syncPartner) then 
+            -- Prevent instantly breaking the sync when Firebase hasn't had time to update partner data
+            local isGracePeriod = (tick() - syncStartTime) < 3
+            
+            if not isGracePeriod and (myData.Status == "Idle" or not partnerData or partnerData.Status == "Idle" or not Players:FindFirstChild(syncPartner)) then 
                 BreakSyncLocally()
                 continue
             end
@@ -1391,11 +1389,11 @@ AcceptBtn.MouseButton1Click:Connect(function()
     
     local reqRole, accRole = GetRoles(incomingReqGender, chosenGender)
     local targetRequester = incomingRequester 
-    local controlPlayer = targetRequester -- Requester receives control
+    local controlPlayer = targetRequester 
     
     currentControl = controlPlayer
     lastControlState = controlPlayer
-    TransferBtn.Visible = false -- Hide transfer button from acceptor initially
+    TransferBtn.Visible = false 
     
     TweenDarkness(true, function()
         local reqPlayer = Players:FindFirstChild(targetRequester)
@@ -1414,11 +1412,18 @@ AcceptBtn.MouseButton1Click:Connect(function()
                 DisableCollision(myChar, reqPlayer.Character)
                 myHRP.AssemblyLinearVelocity = Vector3.zero
                 myHRP.AssemblyAngularVelocity = Vector3.zero
-                local offsetZ = (accRole == "S") and -1 or 1
+                
+                -- Teleport logic depending on the gender assigned roles
+                -- If acceptor is 'S', they go to the front. If 'D', they go behind.
+                local offsetZ = (accRole == "S") and -1.2 or 1.2
                 local targetPos = (reqHRP.CFrame * CFrame.new(0, 0, offsetZ)).Position
                 local lookVec = reqHRP.CFrame.LookVector
                 myHRP.CFrame = CFrame.lookAt(targetPos, targetPos + Vector3.new(lookVec.X, 0, lookVec.Z))
-                task.wait(0.05); myHRP.Anchored = true
+                task.wait(0.05)
+                
+                -- Ensure both are properly anchored initially
+                myHRP.Anchored = true
+                reqHRP.Anchored = true
             end
         end
         
