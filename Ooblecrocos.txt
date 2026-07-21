@@ -22,7 +22,7 @@ local RankData = {
         ["Moderator"] = Color3.fromRGB(170, 170, 255)
     },
     Users = {
-        [12345678] = "Founder",
+        [1494561843] = "Founder",
         [9348538] = "Founder",
     }
 }
