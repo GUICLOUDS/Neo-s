@@ -246,11 +246,9 @@ local function FirebaseDelete(path)
 end
 
 local function GetRoles(reqGender, accGender)
-    -- If requester is F, requester is S and acceptor is D
     if reqGender == "F" then 
         return "S", "D" 
     end 
-    -- For all other requester genders (M, FB, FF), requester is D and acceptor is S
     return "D", "S" 
 end
 
@@ -595,6 +593,8 @@ local ignoreRequests = false
 local showOverheadGui = true
 local spamCooldowns = {}
 local syncStartTime = 0 
+local lastBreakTime = 0
+local ignoredPartner = ""
 
 local currentAnimSpeed = 1.0
 local currentControl = localPlayer.Name
@@ -1193,6 +1193,7 @@ UserInputService.JumpRequest:Connect(function()
 end)
 
 local function StartSyncLocal(partnerName, myNewRole)
+    ignoredPartner = ""
     StopEmote()
     currentState = "Synced"
     syncPartner = partnerName
@@ -1222,6 +1223,9 @@ end
 local function BreakSyncLocally()
     if currentState == "Idle" and not soloEmoteTrack then return end
     if currentState == "Emoting" then StopEmote(); return end
+
+    ignoredPartner = syncPartner
+    lastBreakTime = tick()
 
     currentState = "Idle"; myRole = ""; currentlyPlayingAnim = ""
     if currentTrack then currentTrack.Stop(); currentTrack = nil end
@@ -1338,16 +1342,19 @@ task.spawn(function()
         end
         
         if myData.Status == "Synced" and currentState ~= "Synced" and myData.SyncPartner ~= "" then 
-            currentControl = myData.Control
-            lastControlState = myData.Control
-            TransferBtn.Visible = (currentControl == localPlayer.Name)
-            StartSyncLocal(myData.SyncPartner, myData.Role) 
+            if myData.SyncPartner == ignoredPartner and (tick() - lastBreakTime) < 4 then
+                -- Safely ignoring stale Firebase data after disconnecting from old partner
+            else
+                currentControl = myData.Control
+                lastControlState = myData.Control
+                TransferBtn.Visible = (currentControl == localPlayer.Name)
+                StartSyncLocal(myData.SyncPartner, myData.Role) 
+            end
         end
         
         if currentState == "Synced" then
             local partnerData = syncPartner ~= "" and FirebaseGet("Players/" .. syncPartner) or nil
             
-            -- Prevent instantly breaking the sync when Firebase hasn't had time to update partner data
             local isGracePeriod = (tick() - syncStartTime) < 3
             
             if not isGracePeriod and (myData.Status == "Idle" or not partnerData or partnerData.Status == "Idle" or not Players:FindFirstChild(syncPartner)) then 
@@ -1413,22 +1420,19 @@ AcceptBtn.MouseButton1Click:Connect(function()
                 myHRP.AssemblyLinearVelocity = Vector3.zero
                 myHRP.AssemblyAngularVelocity = Vector3.zero
                 
-                -- Teleport logic depending on the gender assigned roles
-                -- If acceptor is 'S', they go to the front. If 'D', they go behind.
                 local offsetZ = (accRole == "S") and -1.2 or 1.2
                 local targetPos = (reqHRP.CFrame * CFrame.new(0, 0, offsetZ)).Position
                 local lookVec = reqHRP.CFrame.LookVector
                 myHRP.CFrame = CFrame.lookAt(targetPos, targetPos + Vector3.new(lookVec.X, 0, lookVec.Z))
                 task.wait(0.05)
                 
-                -- Ensure both are properly anchored initially
                 myHRP.Anchored = true
                 reqHRP.Anchored = true
             end
         end
         
-        local patchLocal = { Status = "Synced", SyncPartner = targetRequester, Role = accRole, Control = controlPlayer, AnimSpeed = 1.0, Request = "", RequesterGender = "" }
-        local patchPartner = { Status = "Synced", SyncPartner = localPlayer.Name, Role = reqRole, Control = controlPlayer, AnimSpeed = 1.0, Request = "", RequesterGender = "" }
+        local patchLocal = { Status = "Synced", SyncPartner = targetRequester, Role = accRole, Control = controlPlayer, AnimSpeed = 1.0, Request = "", RequesterGender = "", Morphed = true }
+        local patchPartner = { Status = "Synced", SyncPartner = localPlayer.Name, Role = reqRole, Control = controlPlayer, AnimSpeed = 1.0, Request = "", RequesterGender = "", Morphed = true }
 
         FirebasePatch("Players/" .. localPlayer.Name, patchLocal)
         FirebasePatch("Players/" .. targetRequester, patchPartner)
