@@ -1271,8 +1271,6 @@ local function PlaySyncedAnimationsLocally(animName)
     end
 end
 
-UserInputService.JumpRequest:Connect(BreakSyncLocally)
-
 Players.PlayerRemoving:Connect(function(plr)
     if plr == localPlayer then
         pcall(function() requestFunc({ Url = FIREBASE_URL .. "Players/" .. localPlayer.Name .. ".json", Method = "DELETE" }) end)
@@ -1541,6 +1539,21 @@ local function StartMainGUI(gender)
 
     FirebasePatch("Players/" .. localPlayer.Name, { Gender = gender, DisplayName = localPlayer.DisplayName, JobId = game.JobId, Age = chosenAge, Morphed = false, Control = localPlayer.Name, AnimSpeed = 1.0 })
     
+    local stopSyncBtn = Instance.new("TextButton", AnimsTab)
+    stopSyncBtn.Size = UDim2.new(1, 0, 0, 36)
+    stopSyncBtn.BackgroundColor3 = Theme.Danger
+    stopSyncBtn.Text = "Stop Sync & Reset"
+    stopSyncBtn.Font = Enum.Font.Gotham
+    stopSyncBtn.TextSize = 12
+    stopSyncBtn.TextColor3 = Theme.TextPrimary
+    stopSyncBtn.ZIndex = 7
+    AnimateButton(stopSyncBtn)
+    stopSyncBtn.MouseButton1Click:Connect(function() 
+        if currentState == "Synced" then 
+            BreakSyncLocally() 
+        end 
+    end)
+
     local sFolder = animFolder:FindFirstChild("S")
     if sFolder then
         for _, kf in ipairs(sFolder:GetChildren()) do
