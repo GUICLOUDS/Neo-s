@@ -1192,6 +1192,12 @@ local function StopEmote()
     end
 end
 
+UserInputService.JumpRequest:Connect(function()
+    if currentState == "Emoting" then
+        StopEmote()
+    end
+end)
+
 local function StartSyncLocal(partnerName, myNewRole)
     StopEmote()
     currentState = "Synced"
@@ -1384,12 +1390,12 @@ AcceptBtn.MouseButton1Click:Connect(function()
     StopEmote() 
     
     local reqRole, accRole = GetRoles(incomingReqGender, chosenGender)
-    local controlPlayer = localPlayer.Name
     local targetRequester = incomingRequester 
+    local controlPlayer = targetRequester -- Requester receives control
     
     currentControl = controlPlayer
     lastControlState = controlPlayer
-    TransferBtn.Visible = true
+    TransferBtn.Visible = false -- Hide transfer button from acceptor initially
     
     TweenDarkness(true, function()
         local reqPlayer = Players:FindFirstChild(targetRequester)
