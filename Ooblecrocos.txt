@@ -1,7 +1,7 @@
 local LOGO_URL = "https://github.com/Fe-ProjectR/Balls/blob/main/Untitled243_20260721100053.png?raw=true"
 local ANIM_URL = "https://github.com/Fe-ProjectR/Balls/raw/refs/heads/main/Anim1.rbxm"
 local MORPH_URL = "https://github.com/Fe-ProjectR/Balls/raw/refs/heads/main/Morph.rbxm"
-local EMOTES_URL = "https://github.com/Fe-ProjectR/Balls/raw/refs/heads/main/emou.rbxm" 
+local EMOTES_URL = "https://github.com/GUICLOUDS/Neo-s/raw/refs/heads/main/emou2.rbxm" 
 
 local LOGO_FILE = "ROCONS_Logo.png"
 local ANIM_FILE = "ROCONS_Anim_Pack.rbxm"
