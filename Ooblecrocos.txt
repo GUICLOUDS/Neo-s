@@ -45,6 +45,21 @@ local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEna
 local GUI_WIDTH = isMobile and 310 or 360
 local GUI_HEIGHT = isMobile and 330 or 480
 
+local function IsR6CharacterReady(char)
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    local torso = char:FindFirstChild("Torso")
+    local head = char:FindFirstChild("Head")
+    if not hrp or not torso or not head then return false end
+    
+    if not char:FindFirstChild("Left Arm") or not char:FindFirstChild("Right Arm") then return false end
+    if not char:FindFirstChild("Left Leg") or not char:FindFirstChild("Right Leg") then return false end
+    
+    if not torso:FindFirstChild("Neck") or not torso:FindFirstChild("Left Shoulder") or not torso:FindFirstChild("Right Shoulder") or not torso:FindFirstChild("Left Hip") or not torso:FindFirstChild("Right Hip") then return false end
+    
+    return true
+end
+
 local function AnimateButton(btn)
     local origSize = btn.Size
     btn.MouseButton1Down:Connect(function()
@@ -201,7 +216,6 @@ local function GetPlayerRank(userId)
     return RankCache[userId]
 end
 
--- PURPLE-BLACK THEME DEFINITION
 local Theme = {
     Background = Color3.fromRGB(12, 8, 16),
     Panel = Color3.fromRGB(18, 10, 26),
@@ -565,7 +579,6 @@ local function DisableCollision(char1, char2)
     end
 end
 
--- HELPER: PREVENT DOUBLE BOT SPAWNS
 local function DestroyExistingBots(ownerName)
     local botName = "ROCONS_BOT_" .. ownerName
     for _, child in ipairs(Workspace:GetChildren()) do
@@ -575,7 +588,6 @@ local function DestroyExistingBots(ownerName)
     end
 end
 
--- FIXED: HIDE DEFAULT ROBLOX HUMANOID OVERHEAD NAME & PREVENT DUPLICATES
 local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botRole)
     DestroyExistingBots(localPlayer.Name)
     
@@ -796,7 +808,6 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui") end
 
--- PURPLE-BLACK CONTROL TRANSFER NOTIFICATION
 local ControlNotifFrame = Instance.new("Frame", ScreenGui)
 ControlNotifFrame.Size = UDim2.new(0, 280, 0, 50); ControlNotifFrame.Position = UDim2.new(0.5, -140, 0, 80); ControlNotifFrame.BackgroundColor3 = Color3.fromRGB(18, 10, 26); ControlNotifFrame.BackgroundTransparency = 1; ControlNotifFrame.Visible = false; ControlNotifFrame.ZIndex = 150
 local ControlNotifCorner = Instance.new("UICorner", ControlNotifFrame); ControlNotifCorner.CornerRadius = UDim.new(0, 8)
@@ -819,7 +830,6 @@ local function ShowControlNotification(customText)
     end)
 end
 
--- PURPLE-BLACK GENERAL NOTIFICATION
 local NotifFrame = Instance.new("Frame", ScreenGui)
 NotifFrame.Size = UDim2.new(0, 320, 0, 45); NotifFrame.Position = UDim2.new(0.5, -160, 0, 20); NotifFrame.BackgroundColor3 = Color3.fromRGB(18, 10, 26); NotifFrame.Visible = false; NotifFrame.ZIndex = 100
 local NotifCorner = Instance.new("UICorner", NotifFrame); NotifCorner.CornerRadius = UDim.new(0, 8)
@@ -919,7 +929,11 @@ local function CreateTabButton(name, text)
     
     local content = Instance.new("ScrollingFrame", MainFrame)
     content.Size = UDim2.new(1, -20, 1, -145); content.Position = UDim2.new(0, 10, 0, 138); content.BackgroundTransparency = 1; content.Visible = false; content.ScrollBarThickness = 3; content.ScrollBarImageColor3 = Theme.Accent; content.ZIndex = 6; content.BorderSizePixel = 0
+    
     local layout = Instance.new("UIListLayout", content); layout.Padding = UDim.new(0, 8); layout.SortOrder = Enum.SortOrder.LayoutOrder
+    layout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        content.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 20)
+    end)
     
     TabFrames[name] = {Button = btn, Content = content, Layout = layout}
     
@@ -975,7 +989,6 @@ for _, rName in ipairs({"D", "S"}) do
     end)
 end
 
--- SPAWN & DELETE BUTTONS PURPLE-BLACK STYLED
 local SpawnBotBtn = Instance.new("TextButton", BotsTab); SpawnBotBtn.Size = UDim2.new(1, 0, 0, 35); SpawnBotBtn.BackgroundColor3 = Theme.Accent; SpawnBotBtn.Text = "Spawn & Sync Bot"; SpawnBotBtn.Font = Enum.Font.GothamBold; SpawnBotBtn.TextSize = 12; SpawnBotBtn.TextColor3 = Theme.TextPrimary
 AnimateButton(SpawnBotBtn)
 
@@ -1305,7 +1318,6 @@ task.spawn(function()
     end
 end)
 
--- AGE & GENDER MODAL
 local AgeModal = Instance.new("Frame", ScreenGui)
 AgeModal.Size = UDim2.new(0, 300, 0, 180); AgeModal.Position = UDim2.new(0.5, -150, 0.5, -90); AgeModal.BackgroundColor3 = Theme.Panel; AgeModal.Visible = true; AgeModal.ZIndex = 50
 
@@ -1387,7 +1399,7 @@ local function UpdateOverheadGuis(playersData)
     if not playersData then return end
     for pName, pData in pairs(playersData) do
         local plr = Players:FindFirstChild(pName)
-        if plr and plr.Character then
+        if plr and plr.Character and IsR6CharacterReady(plr.Character) then
             local head = plr.Character:FindFirstChild("Head")
             if head then
                 local existingGui = head:FindFirstChild("ROCONS_Overhead")
@@ -1517,6 +1529,25 @@ local function BreakSyncLocally()
     if targetPartner ~= "" and targetPartner ~= "[BOT]" then FirebasePatch("Players/" .. targetPartner, wipeData) end
 end
 
+-- Reset local sync status if the player resets/dies to avoid being permanently locked in a broken state
+local function OnCharacterAdded(newChar)
+    if currentState ~= "Idle" or soloEmoteTrack then
+        BreakSyncLocally()
+        StopEmote()
+    end
+    local hum = newChar:WaitForChild("Humanoid", 3)
+    if hum then
+        hum.Died:Connect(function()
+            if currentState ~= "Idle" or soloEmoteTrack then
+                BreakSyncLocally()
+                StopEmote()
+            end
+        end)
+    end
+end
+localPlayer.CharacterAdded:Connect(OnCharacterAdded)
+if localPlayer.Character then OnCharacterAdded(localPlayer.Character) end
+
 local function PlaySyncedAnimationsLocally(animName)
     local myFolder = animFolder:FindFirstChild(myRole)
     local partnerRole = (myRole == "D") and "S" or "D"
@@ -1546,7 +1577,6 @@ local function PlaySyncedAnimationsLocally(animName)
     end
 end
 
--- POPULATE ANIMATIONS TAB
 local dFolder = animFolder:FindFirstChild("D")
 if dFolder then
     for _, kf in ipairs(dFolder:GetChildren()) do
@@ -1583,7 +1613,6 @@ if dFolder then
     end
 end
 
--- POPULATE EMOTES TAB
 if emotesFolder then
     for _, kf in ipairs(emotesFolder:GetChildren()) do
         if kf:IsA("KeyframeSequence") then
@@ -1608,7 +1637,6 @@ if emotesFolder then
     end
 end
 
--- POPULATE SETTINGS TAB
 local OverheadToggleBtn = Instance.new("TextButton", SettingsTab)
 OverheadToggleBtn.Size = UDim2.new(1, 0, 0, 35); OverheadToggleBtn.BackgroundColor3 = Theme.Card; OverheadToggleBtn.Text = "Overhead GUI: On"; OverheadToggleBtn.Font = Enum.Font.Gotham; OverheadToggleBtn.TextSize = 12; OverheadToggleBtn.TextColor3 = Theme.TextPrimary
 AnimateButton(OverheadToggleBtn)
@@ -1692,7 +1720,7 @@ task.spawn(function()
         
         if myData.Status == "Synced" and currentState ~= "Synced" and myData.SyncPartner ~= "" then 
             if myData.SyncPartner == ignoredPartner and (tick() - lastBreakTime) < 4 then
-                -- Stale data protection
+                
             else
                 currentControl = myData.Control
                 lastControlState = myData.Control
@@ -1796,7 +1824,6 @@ AcceptBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
--- FIXED: PREVENT DOUBLE BOT CREATION & USE PURPLE-BLACK NOTIFICATIONS
 SpawnBotBtn.MouseButton1Click:Connect(function()
     if isSpawningBot then return end
     isSpawningBot = true
@@ -1845,7 +1872,6 @@ DeleteBotBtn.MouseButton1Click:Connect(function()
     ShowNotification("Bot deleted.", 3)
 end)
 
--- BACKGROUND REFRESH & REMOTE SYNC LOOP
 task.spawn(function()
     while true do
         task.wait(2.5)
@@ -1876,10 +1902,42 @@ task.spawn(function()
                         if pData then
                             local isSameJobId = (pData.JobId == game.JobId or game.JobId == "")
                             if isSameJobId then
-                                if pData.CustomCharId and inServerPlayer.Character then
-                                    if not inServerPlayer.Character:GetAttribute("CustomCharApplied_" .. tostring(pData.CustomCharId)) then
-                                        inServerPlayer.Character:SetAttribute("CustomCharApplied_" .. tostring(pData.CustomCharId), true)
-                                        ApplyUserAppearance(inServerPlayer.Character, pData.CustomCharId)
+                                local char = inServerPlayer.Character
+                                
+                                -- CRITICAL FIX: Skip this player entirely if their character isn't fully streamed in yet
+                                if pName ~= localPlayer.Name and (not char or not IsR6CharacterReady(char)) then
+                                    continue
+                                end
+                                
+                                -- Position Snapping Fix: Make sure 3rd-party viewers visually see the synced players together
+                                if pName ~= localPlayer.Name and char and pData.Status == "Synced" and pData.SyncPartner ~= "" and pData.SyncPartner ~= "[BOT]" then
+                                    local partnerPlr = Players:FindFirstChild(pData.SyncPartner)
+                                    if partnerPlr and partnerPlr.Character and IsR6CharacterReady(partnerPlr.Character) then
+                                        local myHRP = char:FindFirstChild("HumanoidRootPart")
+                                        local p_HRP = partnerPlr.Character:FindFirstChild("HumanoidRootPart")
+                                        if myHRP and p_HRP then
+                                            -- If distance is > 3, forcefully snap the "S" role to the "D" role locally
+                                            if pData.Role == "S" and (myHRP.Position - p_HRP.Position).Magnitude > 3.5 then
+                                                local offsetZ = -1.2
+                                                local targetPos = (p_HRP.CFrame * CFrame.new(0, 0, offsetZ)).Position
+                                                local lookVec = p_HRP.CFrame.LookVector
+                                                local fixedY = p_HRP.Position.Y
+                                                local fixedTargetPos = Vector3.new(targetPos.X, fixedY, targetPos.Z)
+                                                local lookAtPos = Vector3.new(fixedTargetPos.X + lookVec.X, fixedY, fixedTargetPos.Z + lookVec.Z)
+                                                
+                                                myHRP.CFrame = CFrame.lookAt(fixedTargetPos, lookAtPos)
+                                                myHRP.Anchored = true
+                                                myHRP.AssemblyLinearVelocity = Vector3.zero
+                                                myHRP.AssemblyAngularVelocity = Vector3.zero
+                                            end
+                                        end
+                                    end
+                                end
+
+                                if pData.CustomCharId and char then
+                                    if not char:GetAttribute("CustomCharApplied_" .. tostring(pData.CustomCharId)) then
+                                        char:SetAttribute("CustomCharApplied_" .. tostring(pData.CustomCharId), true)
+                                        ApplyUserAppearance(char, pData.CustomCharId)
                                     end
                                 end
 
@@ -1887,12 +1945,12 @@ task.spawn(function()
                                     local botName = "ROCONS_BOT_" .. pName
                                     local botChar = Workspace:FindFirstChild(botName)
                                     
-                                    if not botChar and inServerPlayer.Character and pName ~= localPlayer.Name then
-                                        botChar = CreateBotDummy(inServerPlayer.Character, botName, pData.Bot.Username, pData.Bot.Morph, pData.Bot.Role)
+                                    if not botChar and char and pName ~= localPlayer.Name then
+                                        botChar = CreateBotDummy(char, botName, pData.Bot.Username, pData.Bot.Morph, pData.Bot.Role)
                                     end
                                     
                                     if botChar and pData.Status == "Synced" and pData.SyncPartner == "[BOT]" and pData.CurrentAnim ~= "" then
-                                        if not activePlayerEmotes[botName] or activePlayerEmotes[botName].AnimName ~= pData.CurrentAnim then
+                                        if not activePlayerEmotes[botName] or activePlayerEmotes[botName].AnimName ~= pData.CurrentAnim or activePlayerEmotes[botName].Character ~= botChar then
                                             if activePlayerEmotes[botName] and activePlayerEmotes[botName].Track then activePlayerEmotes[botName].Track.Stop() end
                                             
                                             if pName ~= localPlayer.Name then
@@ -1904,19 +1962,19 @@ task.spawn(function()
                                                     if bKfs then
                                                         bKfs.Loop = true
                                                         local track = PlayKeyframeSequence(botChar, bKfs, pData.AnimSpeed or 1.0)
-                                                        activePlayerEmotes[botName] = { AnimName = pData.CurrentAnim, Track = track }
+                                                        activePlayerEmotes[botName] = { AnimName = pData.CurrentAnim, Track = track, Character = botChar }
                                                     end
                                                 end
                                                 
                                                 local pRole = pData.Role 
                                                 local pFolder = animFolder:FindFirstChild(pRole)
-                                                if pFolder and inServerPlayer.Character then
+                                                if pFolder and char then
                                                     local pSuffix = (pRole == "S") and "F" or "M"
                                                     local pKfs = pFolder:FindFirstChild(pData.CurrentAnim .. pSuffix)
                                                     if pKfs then
                                                         pKfs.Loop = true
-                                                        local pTrack = PlayKeyframeSequence(inServerPlayer.Character, pKfs, pData.AnimSpeed or 1.0)
-                                                        activePlayerEmotes[pName] = { AnimName = pData.CurrentAnim, Track = pTrack }
+                                                        local pTrack = PlayKeyframeSequence(char, pKfs, pData.AnimSpeed or 1.0)
+                                                        activePlayerEmotes[pName] = { AnimName = pData.CurrentAnim, Track = pTrack, Character = char }
                                                     end
                                                 end
                                             end
@@ -1924,7 +1982,55 @@ task.spawn(function()
                                     end
                                 end
 
-                                -- Render Player Card in Players Tab
+                                if pName ~= localPlayer.Name and char then
+                                    if pData.Morphed then
+                                        if not char:FindFirstChild("Morph") then
+                                            local pMorph = morphsFolder:FindFirstChild(pData.Gender)
+                                            if pMorph then
+                                                ApplyMorph(char, pMorph, pData.Gender, false)
+                                            end
+                                        end
+                                    else
+                                        if char:FindFirstChild("Morph") then
+                                            RemoveMorph(char)
+                                        end
+                                    end
+                            
+                                    if pData.Status == "Emoting" and pData.CurrentAnim ~= "" then
+                                        if not activePlayerEmotes[pName] or activePlayerEmotes[pName].AnimName ~= pData.CurrentAnim or activePlayerEmotes[pName].Character ~= char then
+                                            if activePlayerEmotes[pName] and activePlayerEmotes[pName].Track then activePlayerEmotes[pName].Track.Stop() end
+                                            local eKfs = emotesFolder and emotesFolder:FindFirstChild(pData.CurrentAnim)
+                                            if eKfs then
+                                                eKfs.Loop = true
+                                                local eTrack = PlayKeyframeSequence(char, eKfs, pData.AnimSpeed or 1.0)
+                                                activePlayerEmotes[pName] = { AnimName = pData.CurrentAnim, Track = eTrack, Character = char }
+                                            end
+                                        end
+                                    elseif pData.Status == "Synced" and pData.SyncPartner ~= "" and pData.CurrentAnim ~= "" then
+                                        if pData.SyncPartner ~= "[BOT]" then
+                                            if not activePlayerEmotes[pName] or activePlayerEmotes[pName].AnimName ~= pData.CurrentAnim or activePlayerEmotes[pName].Character ~= char then
+                                                if activePlayerEmotes[pName] and activePlayerEmotes[pName].Track then activePlayerEmotes[pName].Track.Stop() end
+                                                local pRole = pData.Role 
+                                                local pFolder = animFolder:FindFirstChild(pRole)
+                                                if pFolder then
+                                                    local pSuffix = (pRole == "S") and "F" or "M"
+                                                    local pKfs = pFolder:FindFirstChild(pData.CurrentAnim .. pSuffix)
+                                                    if pKfs then
+                                                        pKfs.Loop = true
+                                                        local pTrack = PlayKeyframeSequence(char, pKfs, pData.AnimSpeed or 1.0)
+                                                        activePlayerEmotes[pName] = { AnimName = pData.CurrentAnim, Track = pTrack, Character = char }
+                                                    end
+                                                end
+                                            end
+                                        end
+                                    else
+                                        if activePlayerEmotes[pName] then
+                                            if activePlayerEmotes[pName].Track then activePlayerEmotes[pName].Track.Stop() end
+                                            activePlayerEmotes[pName] = nil
+                                        end
+                                    end
+                                end
+
                                 if pName ~= localPlayer.Name then
                                     local pFrame = Instance.new("Frame", PlayersTab)
                                     pFrame.Size = UDim2.new(1, 0, 0, 40)
