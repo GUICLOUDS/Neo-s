@@ -27,7 +27,8 @@ local RankData = {
     }
 }
 
-local POLLING_RATE = 0.15
+-- Set to 0 for 0 delay execution
+local POLLING_RATE = 0
 
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
@@ -672,6 +673,7 @@ local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botR
         rankLbl.TextScaled = true
         rankLbl.LayoutOrder = 1
         rankLbl.Visible = false
+        rankLbl.Text = "" -- FIXED DEFAULT LABEL TEXT
         
         local lbl = Instance.new("TextLabel", frame)
         lbl.Name = "TextDisplay"
@@ -681,6 +683,7 @@ local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botR
         lbl.TextColor3 = Theme.TextPrimary
         lbl.TextScaled = true
         lbl.LayoutOrder = 2
+        lbl.Text = "" -- FIXED DEFAULT LABEL TEXT
 
         local botDisplayName = botUser or "Bot"
         local uid = nil
@@ -1017,6 +1020,18 @@ local AnimsTab = CreateTabButton("Anims", "Anims")
 local EmotesTab = CreateTabButton("Emotes", "Emotes")
 local SettingsTab = CreateTabButton("Settings", "Settings")
 TabFrames["Players"].Button.BackgroundColor3 = Theme.Accent; TabFrames["Players"].Button.TextColor3 = Theme.TextPrimary; PlayersTab.Visible = true
+
+-- REFRESH PLAYER LIST BUTTON ADDED HERE
+local RefreshListBtn = Instance.new("TextButton", PlayersTab)
+RefreshListBtn.Name = "RefreshListBtn"
+RefreshListBtn.Size = UDim2.new(1, 0, 0, 30)
+RefreshListBtn.BackgroundColor3 = Theme.PurpleDark
+RefreshListBtn.Text = "Refresh Player List"
+RefreshListBtn.Font = Enum.Font.GothamBold
+RefreshListBtn.TextSize = 12
+RefreshListBtn.TextColor3 = Theme.TextPrimary
+RefreshListBtn.LayoutOrder = -1 -- Keep at the top of the UI list
+AnimateButton(RefreshListBtn)
 
 local BotTitleLabel = Instance.new("TextLabel", BotsTab); BotTitleLabel.Size = UDim2.new(1, 0, 0, 20); BotTitleLabel.Text = "Create Your Bot"; BotTitleLabel.Font = Enum.Font.GothamBold; BotTitleLabel.TextSize = 12; BotTitleLabel.TextColor3 = Theme.TextPrimary; BotTitleLabel.BackgroundTransparency = 1
 local BotUserBox = Instance.new("TextBox", BotsTab); BotUserBox.Size = UDim2.new(1, 0, 0, 30); BotUserBox.BackgroundColor3 = Theme.Card; BotUserBox.PlaceholderText = "Bot Username..."; BotUserBox.Text = ""; BotUserBox.Font = Enum.Font.Gotham; BotUserBox.TextSize = 12; BotUserBox.TextColor3 = Theme.TextPrimary
@@ -1523,8 +1538,8 @@ local function UpdateOverheadGuis(playersData)
                         
                         local frame = Instance.new("Frame", existingGui); frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundColor3 = Theme.Panel; frame.BackgroundTransparency = 0.2
                         local uiLayout = Instance.new("UIListLayout", frame); uiLayout.FillDirection = Enum.FillDirection.Vertical; uiLayout.SortOrder = Enum.SortOrder.LayoutOrder; uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                        local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false
-                        local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2
+                        local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false; rankLbl.Text = "" -- FIXED DEFAULT LABEL TEXT
+                        local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2; lbl.Text = "" -- FIXED DEFAULT LABEL TEXT
                     end
                     
                     if existingGui and existingGui:FindFirstChild("Frame") then
@@ -1561,8 +1576,8 @@ local function UpdateOverheadGuis(playersData)
                             
                             local frame = Instance.new("Frame", existingGui); frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundColor3 = Theme.Panel; frame.BackgroundTransparency = 0.2
                             local uiLayout = Instance.new("UIListLayout", frame); uiLayout.FillDirection = Enum.FillDirection.Vertical; uiLayout.SortOrder = Enum.SortOrder.LayoutOrder; uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                            local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false
-                            local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2
+                            local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false; rankLbl.Text = "" -- FIXED DEFAULT LABEL TEXT
+                            local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2; lbl.Text = "" -- FIXED DEFAULT LABEL TEXT
                         end
                         
                         if existingGui and existingGui:FindFirstChild("Frame") then
@@ -1735,9 +1750,13 @@ pcall(function()
     end)
 end)
 
--- Polling Loop Hooks for Instant UI & Syncing
+-- GUI RELOAD FUNCTION MODIFIED TO IGNORE THE REFRESH BUTTON WHEN DESTROYING CHILDREN
 local function PopulatePlayersTab(playersData)
-    for _, child in ipairs(PlayersTab:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+    for _, child in ipairs(PlayersTab:GetChildren()) do 
+        if child:IsA("TextButton") and child.Name ~= "RefreshListBtn" then 
+            child:Destroy() 
+        end 
+    end
     if not playersData then return end
     
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -1762,6 +1781,15 @@ local function PopulatePlayersTab(playersData)
         end
     end
 end
+
+-- Refresh logic mapped to the newly added button
+RefreshListBtn.MouseButton1Click:Connect(function()
+    task.spawn(function()
+        local data = FirebaseGet("Players")
+        PopulatePlayersTab(data)
+        ShowNotification("Player list reloaded!", 2)
+    end)
+end)
 
 local lastControlState = localPlayer.Name
 local currentActiveUsers = {}
