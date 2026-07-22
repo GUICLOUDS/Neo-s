@@ -72,12 +72,12 @@ if not KeyGui.Parent then KeyGui.Parent = localPlayer:WaitForChild("PlayerGui") 
 local KeyBg = Instance.new("Frame", KeyGui)
 KeyBg.Size = UDim2.new(0, 0, 0, 0)
 KeyBg.Position = UDim2.new(0.5, 0, 0.5, 0)
-KeyBg.BackgroundColor3 = Color3.fromRGB(22, 14, 30)
+KeyBg.BackgroundColor3 = Color3.fromRGB(18, 10, 26)
 KeyBg.BackgroundTransparency = 1
 KeyBg.ZIndex = 1000
 
 local BgStroke = Instance.new("UIStroke", KeyBg)
-BgStroke.Color = Color3.fromRGB(130, 60, 210)
+BgStroke.Color = Color3.fromRGB(140, 50, 225)
 BgStroke.Thickness = 1.5
 BgStroke.Transparency = 1
 BgStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
@@ -156,7 +156,7 @@ end
 
 local function GrantAccess()
     isChecking = true
-    KeyStroke.Color = Color3.fromRGB(0, 255, 0)
+    KeyStroke.Color = Color3.fromRGB(140, 50, 225)
     KeyBox.TextEditable = false
     
     local ti = TweenInfo.new(0.6, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
@@ -201,16 +201,17 @@ local function GetPlayerRank(userId)
     return RankCache[userId]
 end
 
+-- PURPLE-BLACK THEME DEFINITION
 local Theme = {
     Background = Color3.fromRGB(12, 8, 16),
-    Panel = Color3.fromRGB(22, 14, 30),
-    Card = Color3.fromRGB(36, 22, 48),
-    Accent = Color3.fromRGB(130, 60, 210),
+    Panel = Color3.fromRGB(18, 10, 26),
+    Card = Color3.fromRGB(28, 16, 42),
+    Accent = Color3.fromRGB(140, 50, 225),
     TextPrimary = Color3.fromRGB(255, 255, 255),
-    TextSecondary = Color3.fromRGB(190, 170, 210),
-    TextDarkened = Color3.fromRGB(140, 130, 150),
-    Success = Color3.fromRGB(80, 180, 100),
-    Danger = Color3.fromRGB(200, 60, 80)
+    TextSecondary = Color3.fromRGB(210, 180, 240),
+    TextDarkened = Color3.fromRGB(150, 130, 170),
+    Success = Color3.fromRGB(140, 50, 225),
+    Danger = Color3.fromRGB(90, 30, 140)
 }
 
 local function SendWebhook(message)
@@ -258,6 +259,39 @@ local function IsAgeCompatible(myAge, targetAge)
     elseif myAge == "18" then return (targetAge == "17" or targetAge == "18" or targetAge == "19" or targetAge == "20" or targetAge == "21+")
     elseif myAge == "19" or myAge == "20" or myAge == "21+" then return (targetAge == "18" or targetAge == "19" or targetAge == "20" or targetAge == "21+") end
     return true
+end
+
+local function ApplyUserAppearance(character, targetUserId)
+    if not character or not character:FindFirstChildOfClass("Humanoid") then return end
+    local hum = character:FindFirstChildOfClass("Humanoid")
+    
+    local success, appearance = pcall(function()
+        return Players:GetCharacterAppearanceAsync(targetUserId)
+    end)
+    
+    if success and appearance then
+        for _, item in ipairs(character:GetChildren()) do
+            if item:IsA("Accessory") or item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") or item:IsA("BodyColors") or item:IsA("CharacterMesh") then
+                item:Destroy()
+            end
+        end
+        
+        for _, item in ipairs(appearance:GetChildren()) do
+            if item:IsA("Accessory") then
+                hum:AddAccessory(item)
+            elseif item:IsA("Shirt") or item:IsA("Pants") or item:IsA("ShirtGraphic") or item:IsA("BodyColors") or item:IsA("CharacterMesh") then
+                item.Parent = character
+            elseif item:IsA("Decal") then
+                local head = character:FindFirstChild("Head")
+                if head then
+                    for _, v in ipairs(head:GetChildren()) do
+                        if v:IsA("Decal") then v:Destroy() end
+                    end
+                    item.Parent = head
+                end
+            end
+        end
+    end
 end
 
 local guiName = "ROCONS_REBORN_GUI"
@@ -407,24 +441,63 @@ local function PlayKeyframeSequence(character, sequence, defaultSpeed)
     end
 
     local motors = {}
-    for _, desc in ipairs(character:GetDescendants()) do if desc:IsA("Motor6D") and desc.Part1 then motors[desc.Part1.Name] = desc end end
+    for _, desc in ipairs(character:GetDescendants()) do 
+        if desc:IsA("Motor6D") and desc.Part1 then motors[desc.Part1.Name] = desc end 
+    end
 
     local validKeyframes = {}
-    for _, child in ipairs(sequence:GetChildren()) do if child:IsA("Keyframe") then table.insert(validKeyframes, child) end end
+    for _, child in ipairs(sequence:GetChildren()) do 
+        if child:IsA("Keyframe") then table.insert(validKeyframes, child) end 
+    end
     table.sort(validKeyframes, function(a, b) return a.Time < b.Time end)
 
     if #validKeyframes == 0 then return animController end
 
     local duration = validKeyframes[#validKeyframes].Time
+    
+    local keyframeData = {}
+    for i, kf in ipairs(validKeyframes) do
+        local poses = {}
+        local function extractPoses(pose)
+            local styleEnum = Enum.EasingStyle.Linear
+            local dirEnum = Enum.EasingDirection.In
+            pcall(function()
+                styleEnum = Enum.EasingStyle[pose.EasingStyle.Name]
+                dirEnum = Enum.EasingDirection[pose.EasingDirection.Name]
+            end)
+            
+            poses[pose.Name] = {
+                CFrame = pose.CFrame,
+                Style = styleEnum,
+                Dir = dirEnum
+            }
+            
+            for _, subPose in ipairs(pose:GetSubPoses()) do 
+                extractPoses(subPose) 
+            end
+        end
+        for _, p in ipairs(kf:GetPoses()) do 
+            extractPoses(p) 
+        end
+        
+        keyframeData[i] = {
+            Time = kf.Time,
+            Poses = poses
+        }
+    end
+
     local isPlaying = true
     local elapsed = 0
     local lastTick = tick()
     local connection
 
     animController.Stop = function()
-        isPlaying = false; if connection then connection:Disconnect() end
+        isPlaying = false
+        if connection then connection:Disconnect() end
         if humanoid then humanoid.PlatformStand = false end
-        for _, motor in pairs(motors) do if motor and motor.Parent then motor.Transform = CFrame.new() end end
+        for _, motor in pairs(motors) do 
+            if motor and motor.Parent then motor.Transform = CFrame.new() end 
+        end
         if animateScript and animateScript.Parent then animateScript.Disabled = false end
     end
 
@@ -437,35 +510,43 @@ local function PlayKeyframeSequence(character, sequence, defaultSpeed)
         elapsed = elapsed + (dt * animController.Speed)
         
         if elapsed > duration then 
-            if sequence.Loop then elapsed = elapsed % duration 
-            else animController.Stop(); return end 
+            if sequence.Loop then 
+                elapsed = elapsed % duration 
+            else 
+                animController.Stop(); return 
+            end 
         end
 
-        local kf1, kf2 = validKeyframes[1], validKeyframes[#validKeyframes]
-        for i = 1, #validKeyframes - 1 do
-            if elapsed >= validKeyframes[i].Time and elapsed <= validKeyframes[i+1].Time then kf1, kf2 = validKeyframes[i], validKeyframes[i+1] break end
+        local kf1, kf2 = keyframeData[1], keyframeData[#keyframeData]
+        for i = 1, #keyframeData - 1 do
+            if elapsed >= keyframeData[i].Time and elapsed <= keyframeData[i+1].Time then 
+                kf1, kf2 = keyframeData[i], keyframeData[i+1] 
+                break 
+            end
         end
 
         local alpha = 0
-        if kf1 ~= kf2 and kf2.Time > kf1.Time then alpha = (elapsed - kf1.Time) / (kf2.Time - kf1.Time) end
+        if kf1 ~= kf2 and kf2.Time > kf1.Time then 
+            alpha = (elapsed - kf1.Time) / (kf2.Time - kf1.Time) 
+        end
         alpha = math.clamp(alpha, 0, 1)
 
-        local function applyPoses(pose1, pose2)
-            if motors[pose1.Name] then
+        for motorName, motor in pairs(motors) do
+            local pose1 = kf1.Poses[motorName]
+            local pose2 = kf2.Poses[motorName]
+            
+            if pose1 then
                 local cf = pose1.CFrame
                 if pose2 then
                     local currentAlpha = alpha
-                    pcall(function()
-                        local style = Enum.EasingStyle[pose2.EasingStyle.Name]; local dir = Enum.EasingDirection[pose2.EasingDirection.Name]
-                        if style and dir then currentAlpha = TweenService:GetValue(alpha, style, dir) end
-                    end)
+                    if pose2.Style ~= Enum.EasingStyle.Linear then
+                        currentAlpha = TweenService:GetValue(alpha, pose2.Style, pose2.Dir)
+                    end
                     cf = pose1.CFrame:Lerp(pose2.CFrame, currentAlpha)
                 end
-                motors[pose1.Name].Transform = cf
+                motor.Transform = cf
             end
-            for _, subPose1 in ipairs(pose1:GetSubPoses()) do applyPoses(subPose1, pose2 and pose2:FindFirstChild(subPose1.Name)) end
         end
-        for _, pose1 in ipairs(kf1:GetPoses()) do applyPoses(pose1, kf2 and kf2:FindFirstChild(pose1.Name)) end
     end)
     return animController
 end
@@ -482,6 +563,111 @@ local function DisableCollision(char1, char2)
             end
         end
     end
+end
+
+-- HELPER: PREVENT DOUBLE BOT SPAWNS
+local function DestroyExistingBots(ownerName)
+    local botName = "ROCONS_BOT_" .. ownerName
+    for _, child in ipairs(Workspace:GetChildren()) do
+        if child.Name == botName then
+            child:Destroy()
+        end
+    end
+end
+
+-- FIXED: HIDE DEFAULT ROBLOX HUMANOID OVERHEAD NAME & PREVENT DUPLICATES
+local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botRole)
+    DestroyExistingBots(localPlayer.Name)
+    
+    local dummy
+    local targetUid = localPlayer.UserId
+    
+    if botUser and botUser ~= "" then
+        local success, uid = pcall(function() return Players:GetUserIdFromNameAsync(botUser) end)
+        if success and uid then targetUid = uid end
+    end
+    
+    local successDesc, desc = pcall(function()
+        return Players:GetHumanoidDescriptionFromUserId(targetUid)
+    end)
+    
+    if successDesc and desc then
+        pcall(function()
+            dummy = Players:CreateHumanoidModelFromDescription(desc, Enum.HumanoidRigType.R6)
+        end)
+    end
+    
+    if not dummy then
+        local baseSuccess, baseModel = pcall(function() return Players:CreateHumanoidModelFromUserId(targetUid, Enum.HumanoidRigType.R6) end)
+        if baseSuccess and baseModel then dummy = baseModel end
+    end
+    
+    if not dummy and targetCharacter then
+        targetCharacter.Archivable = true
+        dummy = targetCharacter:Clone()
+    end
+    
+    if not dummy then return nil end
+    
+    dummy.Name = botName
+    
+    local hum = dummy:FindFirstChildOfClass("Humanoid")
+    if hum then
+        hum.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+        hum.DisplayName = ""
+    end
+    
+    for _, v in ipairs(dummy:GetDescendants()) do
+        if v:IsA("Script") or v:IsA("LocalScript") then v:Destroy() end
+        if v:IsA("BasePart") then
+            v.CanCollide = false
+            v.Massless = true
+        end
+    end
+    
+    local hrp = dummy:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.CFrame = CFrame.new(0, 10000, 0) end 
+    
+    dummy.Parent = Workspace
+    
+    if targetCharacter then
+        DisableCollision(targetCharacter, dummy)
+    end
+    
+    local morphPrefab = morphsFolder:FindFirstChild(morphName)
+    if morphPrefab then ApplyMorph(dummy, morphPrefab, morphName, false) end
+    
+    local head = dummy:FindFirstChild("Head")
+    if head then
+        local botGui = Instance.new("BillboardGui", head)
+        botGui.Name = "ROCONS_Overhead"
+        botGui.Size = UDim2.new(5, 0, 1.2, 0)
+        botGui.StudsOffset = Vector3.new(0, 2.5, 0)
+        local frame = Instance.new("Frame", botGui)
+        frame.Size = UDim2.new(1,0,1,0)
+        frame.BackgroundColor3 = Theme.Panel
+        frame.BackgroundTransparency = 0.2
+        
+        local corner = Instance.new("UICorner", frame)
+        corner.CornerRadius = UDim.new(0, 4)
+        
+        local txt = Instance.new("TextLabel", frame)
+        txt.Size = UDim2.new(1, 0, 0.45, 0)
+        txt.BackgroundTransparency = 1
+        txt.TextColor3 = Theme.Accent
+        txt.Font = Enum.Font.Gotham
+        txt.TextScaled = true
+        txt.Text = string.format("bot - %s - %s", botUser, morphName)
+    end
+    
+    if hrp and targetCharacter:FindFirstChild("HumanoidRootPart") then
+        local pCFrame = targetCharacter.HumanoidRootPart.CFrame
+        local offsetZ = (botRole == "S") and -1.2 or 1.2
+        hrp.CFrame = pCFrame * CFrame.new(0, 0, offsetZ)
+        hrp.Anchored = true 
+    end
+    
+    return dummy
 end
 
 local playerBubbleStacks = {}
@@ -520,7 +706,7 @@ local function CreateChatBubble(player, messageText)
     bubbleFrame.Size = UDim2.new(0, 0, 0, 0)
     bubbleFrame.Position = UDim2.new(0.5, 0, 0.5, 0)
     bubbleFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    bubbleFrame.BackgroundColor3 = Color3.fromRGB(30, 20, 40)
+    bubbleFrame.BackgroundColor3 = Color3.fromRGB(24, 12, 36)
     bubbleFrame.BackgroundTransparency = 0.15 
     bubbleFrame.ClipsDescendants = true
 
@@ -591,7 +777,7 @@ local activePlayerEmotes = {}
 local isMorphed = false
 local ignoreRequests = false
 local showOverheadGui = true
-local spamCooldowns = {}
+local isSpawningBot = false
 local syncStartTime = 0 
 local lastBreakTime = 0
 local ignoredPartner = ""
@@ -610,27 +796,36 @@ ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 pcall(function() ScreenGui.Parent = CoreGui end)
 if not ScreenGui.Parent then ScreenGui.Parent = localPlayer:WaitForChild("PlayerGui") end
 
+-- PURPLE-BLACK CONTROL TRANSFER NOTIFICATION
 local ControlNotifFrame = Instance.new("Frame", ScreenGui)
-ControlNotifFrame.Size = UDim2.new(0, 260, 0, 50); ControlNotifFrame.Position = UDim2.new(0.5, -130, 0, 80); ControlNotifFrame.BackgroundColor3 = Theme.Accent; ControlNotifFrame.BackgroundTransparency = 1; ControlNotifFrame.Visible = false; ControlNotifFrame.ZIndex = 150
+ControlNotifFrame.Size = UDim2.new(0, 280, 0, 50); ControlNotifFrame.Position = UDim2.new(0.5, -140, 0, 80); ControlNotifFrame.BackgroundColor3 = Color3.fromRGB(18, 10, 26); ControlNotifFrame.BackgroundTransparency = 1; ControlNotifFrame.Visible = false; ControlNotifFrame.ZIndex = 150
+local ControlNotifCorner = Instance.new("UICorner", ControlNotifFrame); ControlNotifCorner.CornerRadius = UDim.new(0, 8)
+local ControlNotifStroke = Instance.new("UIStroke", ControlNotifFrame); ControlNotifStroke.Color = Color3.fromRGB(140, 50, 225); ControlNotifStroke.Thickness = 1.5; ControlNotifStroke.Transparency = 1; ControlNotifStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 local ControlNotifText = Instance.new("TextLabel", ControlNotifFrame)
-ControlNotifText.Size = UDim2.new(1, 0, 1, 0); ControlNotifText.Font = Enum.Font.GothamBold; ControlNotifText.TextSize = 14; ControlNotifText.TextColor3 = Theme.TextPrimary; ControlNotifText.TextTransparency = 1; ControlNotifText.BackgroundTransparency = 1; ControlNotifText.Text = "You are now in control!"; ControlNotifText.ZIndex = 151
+ControlNotifText.Size = UDim2.new(1, 0, 1, 0); ControlNotifText.Font = Enum.Font.GothamBold; ControlNotifText.TextSize = 13; ControlNotifText.TextColor3 = Color3.fromRGB(240, 220, 255); ControlNotifText.TextTransparency = 1; ControlNotifText.BackgroundTransparency = 1; ControlNotifText.Text = "You are now in control!"; ControlNotifText.ZIndex = 151
 
-local function ShowControlNotification()
+local function ShowControlNotification(customText)
+    ControlNotifText.Text = customText or "You are now in control!"
     ControlNotifFrame.Visible = true
-    TweenService:Create(ControlNotifFrame, TweenInfo.new(0.5), {BackgroundTransparency = 0.1}):Play()
-    TweenService:Create(ControlNotifText, TweenInfo.new(0.5), {TextTransparency = 0}):Play()
-    task.delay(5, function()
-        local fade1 = TweenService:Create(ControlNotifFrame, TweenInfo.new(0.8), {BackgroundTransparency = 1})
-        local fade2 = TweenService:Create(ControlNotifText, TweenInfo.new(0.8), {TextTransparency = 1})
-        fade1:Play(); fade2:Play()
+    TweenService:Create(ControlNotifFrame, TweenInfo.new(0.4), {BackgroundTransparency = 0.15}):Play()
+    TweenService:Create(ControlNotifStroke, TweenInfo.new(0.4), {Transparency = 0}):Play()
+    TweenService:Create(ControlNotifText, TweenInfo.new(0.4), {TextTransparency = 0}):Play()
+    task.delay(4, function()
+        local fade1 = TweenService:Create(ControlNotifFrame, TweenInfo.new(0.6), {BackgroundTransparency = 1})
+        local fade2 = TweenService:Create(ControlNotifStroke, TweenInfo.new(0.6), {Transparency = 1})
+        local fade3 = TweenService:Create(ControlNotifText, TweenInfo.new(0.6), {TextTransparency = 1})
+        fade1:Play(); fade2:Play(); fade3:Play()
         fade1.Completed:Connect(function() ControlNotifFrame.Visible = false end)
     end)
 end
 
+-- PURPLE-BLACK GENERAL NOTIFICATION
 local NotifFrame = Instance.new("Frame", ScreenGui)
-NotifFrame.Size = UDim2.new(0, 320, 0, 45); NotifFrame.Position = UDim2.new(0.5, -160, 0, 20); NotifFrame.BackgroundColor3 = Theme.Danger; NotifFrame.Visible = false; NotifFrame.ZIndex = 100
+NotifFrame.Size = UDim2.new(0, 320, 0, 45); NotifFrame.Position = UDim2.new(0.5, -160, 0, 20); NotifFrame.BackgroundColor3 = Color3.fromRGB(18, 10, 26); NotifFrame.Visible = false; NotifFrame.ZIndex = 100
+local NotifCorner = Instance.new("UICorner", NotifFrame); NotifCorner.CornerRadius = UDim.new(0, 8)
+local NotifStroke = Instance.new("UIStroke", NotifFrame); NotifStroke.Color = Color3.fromRGB(140, 50, 225); NotifStroke.Thickness = 1.5; NotifStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 local NotifText = Instance.new("TextLabel", NotifFrame)
-NotifText.Size = UDim2.new(1, -20, 1, 0); NotifText.Position = UDim2.new(0, 10, 0, 0); NotifText.Font = Enum.Font.Gotham; NotifText.TextSize = 12; NotifText.TextColor3 = Theme.TextPrimary; NotifText.BackgroundTransparency = 1; NotifText.TextWrapped = true; NotifText.ZIndex = 101
+NotifText.Size = UDim2.new(1, -20, 1, 0); NotifText.Position = UDim2.new(0, 10, 0, 0); NotifText.Font = Enum.Font.GothamBold; NotifText.TextSize = 12; NotifText.TextColor3 = Color3.fromRGB(240, 220, 255); NotifText.BackgroundTransparency = 1; NotifText.TextWrapped = true; NotifText.ZIndex = 101
 
 local function ShowNotification(text, duration)
     NotifText.Text = text; NotifFrame.Visible = true
@@ -654,7 +849,7 @@ MainFrame.BackgroundColor3 = Theme.Background; MainFrame.Visible = false; MainFr
 local Header = Instance.new("Frame", MainFrame)
 Header.Size = UDim2.new(1, 0, 0, 45); Header.BackgroundColor3 = Theme.Panel; Header.ZIndex = 6
 local HeaderTitle = Instance.new("TextLabel", Header)
-HeaderTitle.Size = UDim2.new(1, -190, 1, 0); HeaderTitle.Position = UDim2.new(0, 15, 0, 0); HeaderTitle.Text = "ROCONS REBORN"; HeaderTitle.Font = Enum.Font.Gotham; HeaderTitle.TextSize = 13; HeaderTitle.TextColor3 = Theme.TextPrimary; HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left; HeaderTitle.BackgroundTransparency = 1; HeaderTitle.ZIndex = 7
+HeaderTitle.Size = UDim2.new(1, -190, 1, 0); HeaderTitle.Position = UDim2.new(0, 15, 0, 0); HeaderTitle.Text = "RETREAT REBORN"; HeaderTitle.Font = Enum.Font.Gotham; HeaderTitle.TextSize = 13; HeaderTitle.TextColor3 = Theme.TextPrimary; HeaderTitle.TextXAlignment = Enum.TextXAlignment.Left; HeaderTitle.BackgroundTransparency = 1; HeaderTitle.ZIndex = 7
 
 local MorphToggleBtn = Instance.new("TextButton", Header)
 MorphToggleBtn.Size = UDim2.new(0, 80, 0, 28); MorphToggleBtn.Position = UDim2.new(1, -90, 0, 8); MorphToggleBtn.BackgroundColor3 = Theme.Card; MorphToggleBtn.Text = "Morph: Off"; MorphToggleBtn.Font = Enum.Font.Gotham; MorphToggleBtn.TextSize = 11; MorphToggleBtn.TextColor3 = Theme.TextPrimary; MorphToggleBtn.ZIndex = 8
@@ -665,7 +860,7 @@ TransferBtn.Size = UDim2.new(0, 80, 0, 28); TransferBtn.Position = UDim2.new(1, 
 AnimateButton(TransferBtn)
 
 TransferBtn.MouseButton1Click:Connect(function()
-    if currentState == "Synced" and syncPartner ~= "" and currentControl == localPlayer.Name then
+    if currentState == "Synced" and syncPartner ~= "" and syncPartner ~= "[BOT]" and currentControl == localPlayer.Name then
         currentControl = syncPartner
         TransferBtn.Visible = false
         FirebasePatch("Players/" .. localPlayer.Name, { Control = syncPartner })
@@ -709,7 +904,7 @@ local function UpdateSpeed(delta)
     if soloEmoteTrack then soloEmoteTrack.Speed = currentAnimSpeed end
 
     FirebasePatch("Players/" .. localPlayer.Name, { AnimSpeed = currentAnimSpeed })
-    if currentState == "Synced" and syncPartner ~= "" then FirebasePatch("Players/" .. syncPartner, { AnimSpeed = currentAnimSpeed }) end
+    if currentState == "Synced" and syncPartner ~= "" and syncPartner ~= "[BOT]" then FirebasePatch("Players/" .. syncPartner, { AnimSpeed = currentAnimSpeed }) end
 end
 
 SpeedDown.MouseButton1Click:Connect(function() UpdateSpeed(-0.1) end)
@@ -718,7 +913,8 @@ SpeedUp.MouseButton1Click:Connect(function() UpdateSpeed(0.1) end)
 local TabFrames = {}
 local function CreateTabButton(name, text)
     local btn = Instance.new("TextButton", NavContainer)
-    btn.Size = UDim2.new(0.25, -5, 1, 0); btn.BackgroundColor3 = Theme.Card; btn.Text = text; btn.Font = Enum.Font.Gotham; btn.TextSize = 11; btn.TextColor3 = Theme.TextSecondary; btn.ZIndex = 7
+    local fraction = (name == "Bots") and 0.20 or 0.18
+    btn.Size = UDim2.new(fraction, -5, 1, 0); btn.BackgroundColor3 = Theme.Card; btn.Text = text; btn.Font = Enum.Font.Gotham; btn.TextSize = 10; btn.TextColor3 = Theme.TextSecondary; btn.ZIndex = 7
     AnimateButton(btn)
     
     local content = Instance.new("ScrollingFrame", MainFrame)
@@ -738,17 +934,60 @@ local function CreateTabButton(name, text)
 end
 
 local PlayersTab = CreateTabButton("Players", "Players")
+local BotsTab = CreateTabButton("Bots", "Bots")
 local AnimsTab = CreateTabButton("Anims", "Anims")
 local EmotesTab = CreateTabButton("Emotes", "Emotes")
 local SettingsTab = CreateTabButton("Settings", "Settings")
 TabFrames["Players"].Button.BackgroundColor3 = Theme.Accent; TabFrames["Players"].Button.TextColor3 = Theme.TextPrimary; PlayersTab.Visible = true
+
+local BotTitleLabel = Instance.new("TextLabel", BotsTab); BotTitleLabel.Size = UDim2.new(1, 0, 0, 20); BotTitleLabel.Text = "Create Your Bot"; BotTitleLabel.Font = Enum.Font.GothamBold; BotTitleLabel.TextSize = 12; BotTitleLabel.TextColor3 = Theme.TextPrimary; BotTitleLabel.BackgroundTransparency = 1
+local BotUserBox = Instance.new("TextBox", BotsTab); BotUserBox.Size = UDim2.new(1, 0, 0, 30); BotUserBox.BackgroundColor3 = Theme.Card; BotUserBox.PlaceholderText = "Bot Username..."; BotUserBox.Text = ""; BotUserBox.Font = Enum.Font.Gotham; BotUserBox.TextSize = 12; BotUserBox.TextColor3 = Theme.TextPrimary
+
+local BotMorphLabel = Instance.new("TextLabel", BotsTab); BotMorphLabel.Size = UDim2.new(1, 0, 0, 20); BotMorphLabel.Text = "Select Morph"; BotMorphLabel.Font = Enum.Font.Gotham; BotMorphLabel.TextSize = 11; BotMorphLabel.TextColor3 = Theme.TextSecondary; BotMorphLabel.BackgroundTransparency = 1
+local BotMorphContainer = Instance.new("Frame", BotsTab); BotMorphContainer.Size = UDim2.new(1, 0, 0, 35); BotMorphContainer.BackgroundTransparency = 1
+local BotMorphLayout = Instance.new("UIListLayout", BotMorphContainer); BotMorphLayout.FillDirection = Enum.FillDirection.Horizontal; BotMorphLayout.Padding = UDim.new(0, 5)
+
+local SelectedBotMorph = "F"
+local botMorphBtns = {}
+for _, mName in ipairs({"F", "FB", "M", "FF"}) do
+    local btn = Instance.new("TextButton", BotMorphContainer)
+    btn.Size = UDim2.new(0.25, -4, 1, 0); btn.BackgroundColor3 = (mName == SelectedBotMorph) and Theme.Accent or Theme.Card; btn.Text = mName; btn.Font = Enum.Font.Gotham; btn.TextSize = 11; btn.TextColor3 = Theme.TextPrimary
+    botMorphBtns[mName] = btn
+    btn.MouseButton1Click:Connect(function()
+        SelectedBotMorph = mName
+        for k, b in pairs(botMorphBtns) do b.BackgroundColor3 = (k == mName) and Theme.Accent or Theme.Card end
+    end)
+end
+
+local BotRoleLabel = Instance.new("TextLabel", BotsTab); BotRoleLabel.Size = UDim2.new(1, 0, 0, 20); BotRoleLabel.Text = "Select Anim Role"; BotRoleLabel.Font = Enum.Font.Gotham; BotRoleLabel.TextSize = 11; BotRoleLabel.TextColor3 = Theme.TextSecondary; BotRoleLabel.BackgroundTransparency = 1
+local BotRoleContainer = Instance.new("Frame", BotsTab); BotRoleContainer.Size = UDim2.new(1, 0, 0, 35); BotRoleContainer.BackgroundTransparency = 1
+local BotRoleLayout = Instance.new("UIListLayout", BotRoleContainer); BotRoleLayout.FillDirection = Enum.FillDirection.Horizontal; BotRoleLayout.Padding = UDim.new(0, 5)
+
+local SelectedBotRole = "S"
+local botRoleBtns = {}
+for _, rName in ipairs({"D", "S"}) do
+    local btn = Instance.new("TextButton", BotRoleContainer)
+    btn.Size = UDim2.new(0.5, -3, 1, 0); btn.BackgroundColor3 = (rName == SelectedBotRole) and Theme.Accent or Theme.Card; btn.Text = rName; btn.Font = Enum.Font.Gotham; btn.TextSize = 11; btn.TextColor3 = Theme.TextPrimary
+    botRoleBtns[rName] = btn
+    btn.MouseButton1Click:Connect(function()
+        SelectedBotRole = rName
+        for k, b in pairs(botRoleBtns) do b.BackgroundColor3 = (k == rName) and Theme.Accent or Theme.Card end
+    end)
+end
+
+-- SPAWN & DELETE BUTTONS PURPLE-BLACK STYLED
+local SpawnBotBtn = Instance.new("TextButton", BotsTab); SpawnBotBtn.Size = UDim2.new(1, 0, 0, 35); SpawnBotBtn.BackgroundColor3 = Theme.Accent; SpawnBotBtn.Text = "Spawn & Sync Bot"; SpawnBotBtn.Font = Enum.Font.GothamBold; SpawnBotBtn.TextSize = 12; SpawnBotBtn.TextColor3 = Theme.TextPrimary
+AnimateButton(SpawnBotBtn)
+
+local DeleteBotBtn = Instance.new("TextButton", BotsTab); DeleteBotBtn.Size = UDim2.new(1, 0, 0, 35); DeleteBotBtn.BackgroundColor3 = Theme.Danger; DeleteBotBtn.Text = "Delete Bot"; DeleteBotBtn.Font = Enum.Font.GothamBold; DeleteBotBtn.TextSize = 12; DeleteBotBtn.TextColor3 = Theme.TextPrimary
+AnimateButton(DeleteBotBtn)
 
 local ChatBoxFrame = Instance.new("Frame", ScreenGui)
 ChatBoxFrame.Name = "ROCONS_StandaloneChatBox"
 ChatBoxFrame.AnchorPoint = Vector2.new(0.5, 0.5) 
 ChatBoxFrame.Size = UDim2.new(0, 320, 0, 220)
 ChatBoxFrame.Position = UDim2.new(0, 175, 0, 125) 
-ChatBoxFrame.BackgroundColor3 = Color3.fromRGB(35, 35, 35) 
+ChatBoxFrame.BackgroundColor3 = Color3.fromRGB(18, 10, 26) 
 ChatBoxFrame.BackgroundTransparency = 0.2 
 ChatBoxFrame.Visible = false
 ChatBoxFrame.Active = true
@@ -782,7 +1021,7 @@ local SectionHeader = Instance.new("ScrollingFrame", ChatBoxFrame)
 SectionHeader.Size = UDim2.new(1, -12, 0, 28)
 SectionHeader.Position = UDim2.new(0, 6, 0, 6)
 SectionHeader.BackgroundTransparency = 0.5
-SectionHeader.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+SectionHeader.BackgroundColor3 = Color3.fromRGB(12, 8, 16)
 SectionHeader.ScrollBarThickness = 2
 SectionHeader.ScrollBarImageColor3 = Theme.Accent
 SectionHeader.CanvasSize = UDim2.new(0, 0, 0, 0)
@@ -796,7 +1035,7 @@ SectionLayout.SortOrder = Enum.SortOrder.LayoutOrder
 local ChatLogScroll = Instance.new("ScrollingFrame", ChatBoxFrame)
 ChatLogScroll.Size = UDim2.new(1, -12, 1, -72)
 ChatLogScroll.Position = UDim2.new(0, 6, 0, 38)
-ChatLogScroll.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+ChatLogScroll.BackgroundColor3 = Color3.fromRGB(12, 8, 16)
 ChatLogScroll.BackgroundTransparency = 0.35
 ChatLogScroll.ScrollBarThickness = 3
 ChatLogScroll.ScrollBarImageColor3 = Theme.Accent
@@ -809,7 +1048,7 @@ ChatLogLayout.SortOrder = Enum.SortOrder.LayoutOrder
 local InputContainer = Instance.new("Frame", ChatBoxFrame)
 InputContainer.Size = UDim2.new(1, -12, 0, 26)
 InputContainer.Position = UDim2.new(0, 6, 1, -30)
-InputContainer.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+InputContainer.BackgroundColor3 = Color3.fromRGB(24, 12, 36)
 InputContainer.BackgroundTransparency = 0.2
 InputContainer.ZIndex = 16
 
@@ -909,7 +1148,7 @@ local function CreateSectionTab(secName)
     local btn = Instance.new("TextButton", SectionHeader)
     btn.Size = UDim2.new(0, 100, 1, 0)
     btn.TextTruncate = Enum.TextTruncate.AtEnd
-    btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+    btn.BackgroundColor3 = Color3.fromRGB(28, 16, 42)
     btn.BackgroundTransparency = 0.2
     btn.Text = secName
     btn.Font = Enum.Font.Gotham
@@ -926,7 +1165,7 @@ local function CreateSectionTab(secName)
 
     btn.MouseButton1Click:Connect(function()
         for _, ch in pairs(chatChannels) do
-            if ch.Button then ch.Button.BackgroundColor3 = Color3.fromRGB(45, 45, 45) end
+            if ch.Button then ch.Button.BackgroundColor3 = Color3.fromRGB(28, 16, 42) end
         end
         btn.BackgroundColor3 = Theme.Accent
         SwitchChatSection(secName)
@@ -962,7 +1201,7 @@ local function DeletePrivateChat(targetUsername)
         FirebaseDelete("Chat/Private/" .. localPlayer.Name .. "/" .. targetUsername)
         FirebaseDelete("Chat/Private/" .. targetUsername .. "/" .. localPlayer.Name)
         
-        ShowNotification("Private chat with " .. targetUsername .. " ended (Player left).", 3)
+        ShowNotification("Private chat with " .. targetUsername .. " ended.", 3)
     end
 end
 
@@ -1011,21 +1250,13 @@ task.spawn(function()
             for key, msg in pairs(genData) do
                 if not processedMsgKeys["Gen_" .. key] then
                     processedMsgKeys["Gen_" .. key] = true
-                    
                     if msg.Time and msg.Time >= scriptStartTime then
                         table.insert(chatChannels["General"].Messages, msg)
-                        
                         if msg.Sender ~= localPlayer.Name then
                             local senderPlr = Players:FindFirstChild(msg.Sender)
                             if senderPlr then CreateChatBubble(senderPlr, msg.Text) end
                         end
-
-                        if activeSection == "General" then
-                            SwitchChatSection("General")
-                        else
-                            chatChannels["General"].Unread = true
-                            if chatChannels["General"].Button then chatChannels["General"].Button.TextColor3 = Theme.TextPrimary end
-                        end
+                        if activeSection == "General" then SwitchChatSection("General") else chatChannels["General"].Unread = true if chatChannels["General"].Button then chatChannels["General"].Button.TextColor3 = Theme.TextPrimary end end
                     end
                 end
             end
@@ -1036,21 +1267,13 @@ task.spawn(function()
             for key, msg in pairs(globData) do
                 if not processedMsgKeys["Glob_" .. key] then
                     processedMsgKeys["Glob_" .. key] = true
-                    
                     if msg.Time and msg.Time >= scriptStartTime then
                         table.insert(chatChannels["Global"].Messages, msg)
-
                         if msg.Sender ~= localPlayer.Name then
                             local senderPlr = Players:FindFirstChild(msg.Sender)
                             if senderPlr then CreateChatBubble(senderPlr, msg.Text) end
                         end
-
-                        if activeSection == "Global" then
-                            SwitchChatSection("Global")
-                        else
-                            chatChannels["Global"].Unread = true
-                            if chatChannels["Global"].Button then chatChannels["Global"].Button.TextColor3 = Theme.TextPrimary end
-                        end
+                        if activeSection == "Global" then SwitchChatSection("Global") else chatChannels["Global"].Unread = true if chatChannels["Global"].Button then chatChannels["Global"].Button.TextColor3 = Theme.TextPrimary end end
                     end
                 end
             end
@@ -1066,21 +1289,13 @@ task.spawn(function()
                     for key, msg in pairs(msgList) do
                         if not processedMsgKeys["PM_" .. key] then
                             processedMsgKeys["PM_" .. key] = true
-                            
                             if msg.Time and msg.Time >= scriptStartTime then
                                 table.insert(chatChannels[pmSecName].Messages, msg)
-
                                 if msg.Sender ~= localPlayer.Name then
                                     local senderPlr = Players:FindFirstChild(msg.Sender)
                                     if senderPlr then CreateChatBubble(senderPlr, msg.Text) end
                                 end
-
-                                if activeSection == pmSecName then
-                                    SwitchChatSection(pmSecName)
-                                else
-                                    chatChannels[pmSecName].Unread = true
-                                    if chatChannels[pmSecName].Button then chatChannels[pmSecName].Button.TextColor3 = Theme.TextPrimary end
-                                end
+                                if activeSection == pmSecName then SwitchChatSection(pmSecName) else chatChannels[pmSecName].Unread = true if chatChannels[pmSecName].Button then chatChannels[pmSecName].Button.TextColor3 = Theme.TextPrimary end end
                             end
                         end
                     end
@@ -1090,23 +1305,23 @@ task.spawn(function()
     end
 end)
 
+-- AGE & GENDER MODAL
 local AgeModal = Instance.new("Frame", ScreenGui)
 AgeModal.Size = UDim2.new(0, 300, 0, 180); AgeModal.Position = UDim2.new(0.5, -150, 0.5, -90); AgeModal.BackgroundColor3 = Theme.Panel; AgeModal.Visible = true; AgeModal.ZIndex = 50
 
-local AgeTitle = Instance.new("TextLabel", AgeModal); AgeTitle.Size = UDim2.new(1, 0, 0, 45); AgeTitle.Text = "SELECT YOUR AGE"; AgeTitle.Font = Enum.Font.Gotham; AgeTitle.TextSize = 14; AgeTitle.TextColor3 = Theme.TextPrimary; AgeTitle.BackgroundTransparency = 1; AgeTitle.ZIndex = 51
+local AgeTitle = Instance.new("TextLabel", AgeModal); AgeTitle.Size = UDim2.new(1, 0, 0, 45); AgeTitle.Text = "SELECT YOUR AGE"; AgeTitle.Font = Enum.Font.GothamBold; AgeTitle.TextSize = 14; AgeTitle.TextColor3 = Theme.TextPrimary; AgeTitle.BackgroundTransparency = 1; AgeTitle.ZIndex = 51
 
 local currentAgeVal = 16
-local AgeLeftBtn = Instance.new("TextButton", AgeModal); AgeLeftBtn.Size = UDim2.new(0, 45, 0, 45); AgeLeftBtn.Position = UDim2.new(0, 40, 0, 60); AgeLeftBtn.BackgroundColor3 = Theme.Card; AgeLeftBtn.Text = "<"; AgeLeftBtn.Font = Enum.Font.Gotham; AgeLeftBtn.TextSize = 20; AgeLeftBtn.TextColor3 = Theme.TextPrimary; AgeLeftBtn.ZIndex = 51
-local AgeRightBtn = Instance.new("TextButton", AgeModal); AgeRightBtn.Size = UDim2.new(0, 45, 0, 45); AgeRightBtn.Position = UDim2.new(1, -85, 0, 60); AgeRightBtn.BackgroundColor3 = Theme.Card; AgeRightBtn.Text = ">"; AgeRightBtn.Font = Enum.Font.Gotham; AgeRightBtn.TextSize = 20; AgeRightBtn.TextColor3 = Theme.TextPrimary; AgeRightBtn.ZIndex = 51
-
+local AgeLeftBtn = Instance.new("TextButton", AgeModal); AgeLeftBtn.Size = UDim2.new(0, 45, 0, 45); AgeLeftBtn.Position = UDim2.new(0, 40, 0, 60); AgeLeftBtn.BackgroundColor3 = Theme.Card; AgeLeftBtn.Text = "<"; AgeLeftBtn.Font = Enum.Font.GothamBold; AgeLeftBtn.TextSize = 20; AgeLeftBtn.TextColor3 = Theme.TextPrimary; AgeLeftBtn.ZIndex = 51
+local AgeRightBtn = Instance.new("TextButton", AgeModal); AgeRightBtn.Size = UDim2.new(0, 45, 0, 45); AgeRightBtn.Position = UDim2.new(1, -85, 0, 60); AgeRightBtn.BackgroundColor3 = Theme.Card; AgeRightBtn.Text = ">"; AgeRightBtn.Font = Enum.Font.GothamBold; AgeRightBtn.TextSize = 20; AgeRightBtn.TextColor3 = Theme.TextPrimary; AgeRightBtn.ZIndex = 51
 AnimateButton(AgeLeftBtn); AnimateButton(AgeRightBtn)
 
-local AgeInput = Instance.new("TextBox", AgeModal); AgeInput.Size = UDim2.new(0, 110, 0, 45); AgeInput.Position = UDim2.new(0.5, -55, 0, 60); AgeInput.BackgroundColor3 = Theme.Background; AgeInput.Text = "16"; AgeInput.Font = Enum.Font.Gotham; AgeInput.TextSize = 18; AgeInput.TextColor3 = Theme.Accent; AgeInput.ZIndex = 51
+local AgeInput = Instance.new("TextBox", AgeModal); AgeInput.Size = UDim2.new(0, 110, 0, 45); AgeInput.Position = UDim2.new(0.5, -55, 0, 60); AgeInput.BackgroundColor3 = Theme.Background; AgeInput.Text = "16"; AgeInput.Font = Enum.Font.GothamBold; AgeInput.TextSize = 18; AgeInput.TextColor3 = Theme.Accent; AgeInput.ZIndex = 51
 
 local AgeConfirm = Instance.new("TextButton", AgeModal)
-AgeConfirm.Size = UDim2.new(1, -80, 0, 40); AgeConfirm.Position = UDim2.new(0, 40, 0, 120); AgeConfirm.BackgroundColor3 = Color3.new(0, 0, 0); AgeConfirm.Text = "Confirm"; AgeConfirm.Font = Enum.Font.Gotham; AgeConfirm.TextSize = 14; AgeConfirm.TextColor3 = Theme.TextPrimary; AgeConfirm.ZIndex = 51
+AgeConfirm.Size = UDim2.new(1, -80, 0, 40); AgeConfirm.Position = UDim2.new(0, 40, 0, 120); AgeConfirm.BackgroundColor3 = Theme.Card; AgeConfirm.Text = "Confirm"; AgeConfirm.Font = Enum.Font.GothamBold; AgeConfirm.TextSize = 14; AgeConfirm.TextColor3 = Theme.TextPrimary; AgeConfirm.ZIndex = 51
 AnimateButton(AgeConfirm)
-local AgeConfirmStroke = Instance.new("UIStroke", AgeConfirm); AgeConfirmStroke.Color = Theme.Accent; AgeConfirmStroke.Thickness = 2; AgeConfirmStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+local AgeConfirmStroke = Instance.new("UIStroke", AgeConfirm); AgeConfirmStroke.Color = Theme.Accent; AgeConfirmStroke.Thickness = 1.5; AgeConfirmStroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
 
 local function UpdateAgeDisplay()
     if currentAgeVal >= 21 then AgeInput.Text = "21+" else AgeInput.Text = tostring(currentAgeVal) end
@@ -1121,14 +1336,44 @@ end)
 
 local GenderModal = Instance.new("Frame", ScreenGui)
 GenderModal.Size = UDim2.new(0, 300, 0, 220); GenderModal.Position = UDim2.new(0.5, -150, 0.5, -110); GenderModal.BackgroundColor3 = Theme.Panel; GenderModal.Visible = false; GenderModal.ZIndex = 50
-local ModalTitle = Instance.new("TextLabel", GenderModal); ModalTitle.Size = UDim2.new(1, 0, 0, 45); ModalTitle.Text = "SELECT YOUR GENDER"; ModalTitle.Font = Enum.Font.Gotham; ModalTitle.TextSize = 14; ModalTitle.TextColor3 = Theme.TextPrimary; ModalTitle.BackgroundTransparency = 1; ModalTitle.ZIndex = 51
+local ModalTitle = Instance.new("TextLabel", GenderModal); ModalTitle.Size = UDim2.new(1, 0, 0, 45); ModalTitle.Text = "SELECT YOUR GENDER"; ModalTitle.Font = Enum.Font.GothamBold; ModalTitle.TextSize = 14; ModalTitle.TextColor3 = Theme.TextPrimary; ModalTitle.BackgroundTransparency = 1; ModalTitle.ZIndex = 51
+
+local genderGrid = Instance.new("Frame", GenderModal)
+genderGrid.Size = UDim2.new(1, -40, 0, 150); genderGrid.Position = UDim2.new(0, 20, 0, 50); genderGrid.BackgroundTransparency = 1; genderGrid.ZIndex = 51
+local gridLayout = Instance.new("UIGridLayout", genderGrid); gridLayout.CellSize = UDim2.new(0.5, -5, 0.5, -5); gridLayout.CellPadding = UDim2.new(0, 10, 0, 10)
+
+for _, gName in ipairs({"F", "FB", "M", "FF"}) do
+    local gBtn = Instance.new("TextButton", genderGrid)
+    gBtn.BackgroundColor3 = Theme.Card; gBtn.Text = gName; gBtn.Font = Enum.Font.GothamBold; gBtn.TextSize = 14; gBtn.TextColor3 = Theme.TextPrimary; gBtn.ZIndex = 52
+    AnimateButton(gBtn)
+    gBtn.MouseButton1Click:Connect(function()
+        chosenGender = gName
+        chosenAge = AgeInput.Text
+        GenderModal.Visible = false
+        FirebasePatch("Players/" .. localPlayer.Name, { Age = chosenAge, Gender = chosenGender })
+        ShowNotification("Setup completed! You can now use the menu.", 3)
+    end)
+end
+
+AgeConfirm.MouseButton1Click:Connect(function()
+    AgeModal.Visible = false
+    GenderModal.Visible = true
+end)
 
 local InviteModal = Instance.new("Frame", ScreenGui)
 InviteModal.Size = UDim2.new(0, 300, 0, 150); InviteModal.Position = UDim2.new(0.5, -150, 0.2, 0); InviteModal.BackgroundColor3 = Theme.Panel; InviteModal.Visible = false; InviteModal.ZIndex = 50
 local InviteText = Instance.new("TextLabel", InviteModal); InviteText.Size = UDim2.new(1, -20, 0, 70); InviteText.Position = UDim2.new(0, 10, 0, 10); InviteText.Font = Enum.Font.Gotham; InviteText.TextSize = 13; InviteText.TextColor3 = Theme.TextPrimary; InviteText.BackgroundTransparency = 1; InviteText.TextWrapped = true; InviteText.ZIndex = 55
-local AcceptBtn = Instance.new("TextButton", InviteModal); AcceptBtn.Size = UDim2.new(0.42, 0, 0, 36); AcceptBtn.Position = UDim2.new(0.05, 0, 0, 95); AcceptBtn.BackgroundColor3 = Theme.Success; AcceptBtn.Text = "Accept"; AcceptBtn.Font = Enum.Font.Gotham; AcceptBtn.TextSize = 13; AcceptBtn.TextColor3 = Color3.new(0,0,0); AcceptBtn.ZIndex = 55
-local DenyBtn = Instance.new("TextButton", InviteModal); DenyBtn.Size = UDim2.new(0.42, 0, 0, 36); DenyBtn.Position = UDim2.new(0.53, 0, 0, 95); DenyBtn.BackgroundColor3 = Theme.Danger; DenyBtn.Text = "Deny"; DenyBtn.Font = Enum.Font.Gotham; DenyBtn.TextSize = 13; DenyBtn.TextColor3 = Theme.TextPrimary; DenyBtn.ZIndex = 55
+local AcceptBtn = Instance.new("TextButton", InviteModal); AcceptBtn.Size = UDim2.new(0.42, 0, 0, 36); AcceptBtn.Position = UDim2.new(0.05, 0, 0, 95); AcceptBtn.BackgroundColor3 = Theme.Accent; AcceptBtn.Text = "Accept"; AcceptBtn.Font = Enum.Font.GothamBold; AcceptBtn.TextSize = 13; AcceptBtn.TextColor3 = Theme.TextPrimary; AcceptBtn.ZIndex = 55
+local DenyBtn = Instance.new("TextButton", InviteModal); DenyBtn.Size = UDim2.new(0.42, 0, 0, 36); DenyBtn.Position = UDim2.new(0.53, 0, 0, 95); DenyBtn.BackgroundColor3 = Theme.Danger; DenyBtn.Text = "Deny"; DenyBtn.Font = Enum.Font.GothamBold; DenyBtn.TextSize = 13; DenyBtn.TextColor3 = Theme.TextPrimary; DenyBtn.ZIndex = 55
 AnimateButton(AcceptBtn); AnimateButton(DenyBtn)
+
+DenyBtn.MouseButton1Click:Connect(function()
+    InviteModal.Visible = false
+    if incomingRequester ~= "" then
+        FirebasePatch("Players/" .. localPlayer.Name, { Request = "", RequesterGender = "" })
+        incomingRequester = ""; incomingReqGender = ""
+    end
+end)
 
 local DarkFrame = Instance.new("Frame", ScreenGui); DarkFrame.Size = UDim2.new(1, 0, 1, 0); DarkFrame.BackgroundColor3 = Color3.new(0,0,0); DarkFrame.BackgroundTransparency = 1; DarkFrame.ZIndex = 100; DarkFrame.Visible = false
 local function TweenDarkness(fadeIn, callback)
@@ -1157,6 +1402,7 @@ local function UpdateOverheadGuis(playersData)
                         existingGui.Parent = head
                         
                         local frame = Instance.new("Frame", existingGui); frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundColor3 = Theme.Panel; frame.BackgroundTransparency = 0.2
+                        local corner = Instance.new("UICorner", frame); corner.CornerRadius = UDim.new(0, 4)
                         local uiLayout = Instance.new("UIListLayout", frame); uiLayout.FillDirection = Enum.FillDirection.Vertical; uiLayout.SortOrder = Enum.SortOrder.LayoutOrder; uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiLayout.VerticalAlignment = Enum.VerticalAlignment.Center
                         local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false
                         local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2
@@ -1187,9 +1433,7 @@ local function StopEmote()
 end
 
 UserInputService.JumpRequest:Connect(function()
-    if currentState == "Emoting" then
-        StopEmote()
-    end
+    if currentState == "Emoting" then StopEmote() end
 end)
 
 local function StartSyncLocal(partnerName, myNewRole)
@@ -1200,11 +1444,28 @@ local function StartSyncLocal(partnerName, myNewRole)
     myRole = myNewRole
     syncStartTime = tick()
 
-    local pPlayer = Players:FindFirstChild(partnerName)
-    if pPlayer and pPlayer.Character and localPlayer.Character then DisableCollision(localPlayer.Character, pPlayer.Character) end
+    if partnerName ~= "[BOT]" then
+        local pPlayer = Players:FindFirstChild(partnerName)
+        if pPlayer and pPlayer.Character and localPlayer.Character then DisableCollision(localPlayer.Character, pPlayer.Character) end
+    end
 
     isMorphed = true
     FirebasePatch("Players/" .. localPlayer.Name, { Morphed = true })
+    
+    if localPlayer.Character then
+        local myHRP = localPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if myHRP then
+            myHRP.AssemblyLinearVelocity = Vector3.zero
+            myHRP.AssemblyAngularVelocity = Vector3.zero
+            myHRP.Anchored = true
+        end
+        local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum:SetStateEnabled(Enum.HumanoidStateType.Climbing, false)
+            hum.AutoRotate = false
+        end
+    end
+
     local myMorph = morphsFolder:FindFirstChild(chosenGender)
     if myMorph and localPlayer.Character then ApplyMorph(localPlayer.Character, myMorph, chosenGender, localPlayer:GetAttribute("KeepClothing")) end
     
@@ -1232,8 +1493,9 @@ local function BreakSyncLocally()
     if partnerTrack then partnerTrack.Stop(); partnerTrack = nil end
     
     if localPlayer.Character then CleanUpCharacter(localPlayer.Character, false) end
+    
     local targetPartner = syncPartner
-    if targetPartner ~= "" then
+    if targetPartner ~= "" and targetPartner ~= "[BOT]" then
         local pPlayer = Players:FindFirstChild(targetPartner)
         if pPlayer and pPlayer.Character then CleanUpCharacter(pPlayer.Character, false) end
     end
@@ -1252,7 +1514,7 @@ local function BreakSyncLocally()
 
     local wipeData = { Status = "Idle", SyncPartner = "", CurrentAnim = "", Control = localPlayer.Name, AnimSpeed = 1.0, Role = "", Morphed = false, Request = "", RequesterGender = "" }
     FirebasePatch("Players/" .. localPlayer.Name, wipeData)
-    if targetPartner ~= "" then FirebasePatch("Players/" .. targetPartner, wipeData) end
+    if targetPartner ~= "" and targetPartner ~= "[BOT]" then FirebasePatch("Players/" .. targetPartner, wipeData) end
 end
 
 local function PlaySyncedAnimationsLocally(animName)
@@ -1271,10 +1533,97 @@ local function PlaySyncedAnimationsLocally(animName)
         if partnerTrack then partnerTrack.Stop() end
         
         if myKfs and localPlayer.Character then currentTrack = PlayKeyframeSequence(localPlayer.Character, myKfs, currentAnimSpeed) end
-        local pPlayer = Players:FindFirstChild(syncPartner)
-        if pPlayer and pPlayer.Character and partnerKfs then partnerTrack = PlayKeyframeSequence(pPlayer.Character, partnerKfs, currentAnimSpeed) end
+        
+        if syncPartner == "[BOT]" then
+            local botChar = Workspace:FindFirstChild("ROCONS_BOT_" .. localPlayer.Name)
+            if botChar and partnerKfs then 
+                partnerTrack = PlayKeyframeSequence(botChar, partnerKfs, currentAnimSpeed) 
+            end
+        else
+            local pPlayer = Players:FindFirstChild(syncPartner)
+            if pPlayer and pPlayer.Character and partnerKfs then partnerTrack = PlayKeyframeSequence(pPlayer.Character, partnerKfs, currentAnimSpeed) end
+        end
     end
 end
+
+-- POPULATE ANIMATIONS TAB
+local dFolder = animFolder:FindFirstChild("D")
+if dFolder then
+    for _, kf in ipairs(dFolder:GetChildren()) do
+        if kf:IsA("KeyframeSequence") then
+            local rawName = kf.Name
+            local cleanName = rawName:sub(-1) == "M" and rawName:sub(1, -2) or rawName
+            
+            local animBtn = Instance.new("TextButton", AnimsTab)
+            animBtn.Size = UDim2.new(1, 0, 0, 32)
+            animBtn.BackgroundColor3 = Theme.Card
+            animBtn.Text = cleanName
+            animBtn.Font = Enum.Font.Gotham
+            animBtn.TextSize = 11
+            animBtn.TextColor3 = Theme.TextPrimary
+            AnimateButton(animBtn)
+            
+            animBtn.MouseButton1Click:Connect(function()
+                if currentState == "Synced" then
+                    if currentControl ~= localPlayer.Name then
+                        ShowNotification("You don't have control!", 2)
+                        return
+                    end
+                    currentlyPlayingAnim = cleanName
+                    FirebasePatch("Players/" .. localPlayer.Name, { CurrentAnim = cleanName })
+                    if syncPartner ~= "" and syncPartner ~= "[BOT]" then
+                        FirebasePatch("Players/" .. syncPartner, { CurrentAnim = cleanName })
+                    end
+                    PlaySyncedAnimationsLocally(cleanName)
+                else
+                    ShowNotification("You must be synced to play dual animations!", 3)
+                end
+            end)
+        end
+    end
+end
+
+-- POPULATE EMOTES TAB
+if emotesFolder then
+    for _, kf in ipairs(emotesFolder:GetChildren()) do
+        if kf:IsA("KeyframeSequence") then
+            local emoteBtn = Instance.new("TextButton", EmotesTab)
+            emoteBtn.Size = UDim2.new(1, 0, 0, 32)
+            emoteBtn.BackgroundColor3 = Theme.Card
+            emoteBtn.Text = kf.Name
+            emoteBtn.Font = Enum.Font.Gotham
+            emoteBtn.TextSize = 11
+            emoteBtn.TextColor3 = Theme.TextPrimary
+            AnimateButton(emoteBtn)
+
+            emoteBtn.MouseButton1Click:Connect(function()
+                if currentState == "Synced" then BreakSyncLocally() end
+                StopEmote()
+                currentState = "Emoting"
+                kf.Loop = true
+                soloEmoteTrack = PlayKeyframeSequence(localPlayer.Character, kf, 1.0)
+                FirebasePatch("Players/" .. localPlayer.Name, { Status = "Emoting", CurrentAnim = kf.Name })
+            end)
+        end
+    end
+end
+
+-- POPULATE SETTINGS TAB
+local OverheadToggleBtn = Instance.new("TextButton", SettingsTab)
+OverheadToggleBtn.Size = UDim2.new(1, 0, 0, 35); OverheadToggleBtn.BackgroundColor3 = Theme.Card; OverheadToggleBtn.Text = "Overhead GUI: On"; OverheadToggleBtn.Font = Enum.Font.Gotham; OverheadToggleBtn.TextSize = 12; OverheadToggleBtn.TextColor3 = Theme.TextPrimary
+AnimateButton(OverheadToggleBtn)
+OverheadToggleBtn.MouseButton1Click:Connect(function()
+    showOverheadGui = not showOverheadGui
+    OverheadToggleBtn.Text = showOverheadGui and "Overhead GUI: On" or "Overhead GUI: Off"
+end)
+
+local IgnoreReqToggleBtn = Instance.new("TextButton", SettingsTab)
+IgnoreReqToggleBtn.Size = UDim2.new(1, 0, 0, 35); IgnoreReqToggleBtn.BackgroundColor3 = Theme.Card; IgnoreReqToggleBtn.Text = "Ignore Requests: Off"; IgnoreReqToggleBtn.Font = Enum.Font.Gotham; IgnoreReqToggleBtn.TextSize = 12; IgnoreReqToggleBtn.TextColor3 = Theme.TextPrimary
+AnimateButton(IgnoreReqToggleBtn)
+IgnoreReqToggleBtn.MouseButton1Click:Connect(function()
+    ignoreRequests = not ignoreRequests
+    IgnoreReqToggleBtn.Text = ignoreRequests and "Ignore Requests: On" or "Ignore Requests: Off"
+end)
 
 Players.PlayerRemoving:Connect(function(plr)
     if plr == localPlayer then
@@ -1317,7 +1666,7 @@ task.spawn(function()
 
         if currentState == "Synced" and myData.Control and myData.Control ~= "" then
             if myData.Control == localPlayer.Name and lastControlState ~= localPlayer.Name then
-                ShowControlNotification()
+                ShowControlNotification("You are now in control!")
                 TransferBtn.Visible = true
             elseif myData.Control ~= localPlayer.Name then
                 TransferBtn.Visible = false
@@ -1343,7 +1692,7 @@ task.spawn(function()
         
         if myData.Status == "Synced" and currentState ~= "Synced" and myData.SyncPartner ~= "" then 
             if myData.SyncPartner == ignoredPartner and (tick() - lastBreakTime) < 4 then
-                -- Safely ignoring stale Firebase data after disconnecting from old partner
+                -- Stale data protection
             else
                 currentControl = myData.Control
                 lastControlState = myData.Control
@@ -1353,11 +1702,10 @@ task.spawn(function()
         end
         
         if currentState == "Synced" then
-            local partnerData = syncPartner ~= "" and FirebaseGet("Players/" .. syncPartner) or nil
-            
+            local partnerData = (syncPartner ~= "" and syncPartner ~= "[BOT]") and FirebaseGet("Players/" .. syncPartner) or nil
             local isGracePeriod = (tick() - syncStartTime) < 3
             
-            if not isGracePeriod and (myData.Status == "Idle" or not partnerData or partnerData.Status == "Idle" or not Players:FindFirstChild(syncPartner)) then 
+            if not isGracePeriod and syncPartner ~= "[BOT]" and (myData.Status == "Idle" or not partnerData or partnerData.Status == "Idle" or not Players:FindFirstChild(syncPartner)) then 
                 BreakSyncLocally()
                 continue
             end
@@ -1420,14 +1768,19 @@ AcceptBtn.MouseButton1Click:Connect(function()
                 myHRP.AssemblyLinearVelocity = Vector3.zero
                 myHRP.AssemblyAngularVelocity = Vector3.zero
                 
+                myHRP.Anchored = true
+                reqHRP.Anchored = true
+                
                 local offsetZ = (accRole == "S") and -1.2 or 1.2
                 local targetPos = (reqHRP.CFrame * CFrame.new(0, 0, offsetZ)).Position
                 local lookVec = reqHRP.CFrame.LookVector
-                myHRP.CFrame = CFrame.lookAt(targetPos, targetPos + Vector3.new(lookVec.X, 0, lookVec.Z))
-                task.wait(0.05)
                 
-                myHRP.Anchored = true
-                reqHRP.Anchored = true
+                local fixedY = reqHRP.Position.Y
+                local fixedTargetPos = Vector3.new(targetPos.X, fixedY, targetPos.Z)
+                local lookAtPos = Vector3.new(fixedTargetPos.X + lookVec.X, fixedY, fixedTargetPos.Z + lookVec.Z)
+                
+                myHRP.CFrame = CFrame.lookAt(fixedTargetPos, lookAtPos)
+                task.wait(0.05)
             end
         end
         
@@ -1443,12 +1796,56 @@ AcceptBtn.MouseButton1Click:Connect(function()
     end)
 end)
 
-DenyBtn.MouseButton1Click:Connect(function()
-    InviteModal.Visible = false
-    FirebasePatch("Players/" .. localPlayer.Name, { Request = "", RequesterGender = "" })
-    incomingRequester = ""
+-- FIXED: PREVENT DOUBLE BOT CREATION & USE PURPLE-BLACK NOTIFICATIONS
+SpawnBotBtn.MouseButton1Click:Connect(function()
+    if isSpawningBot then return end
+    isSpawningBot = true
+
+    local reqUser = BotUserBox.Text
+    if reqUser == "" then 
+        ShowNotification("Enter a bot username!", 3) 
+        isSpawningBot = false
+        return 
+    end
+    
+    local playersData = FirebaseGet("Players") or {}
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr.Name:lower() == reqUser:lower() and plr ~= localPlayer then
+            if playersData[plr.Name] and playersData[plr.Name].JobId == game.JobId then
+                SendWebhook(string.format("🚨 **Bot Alert:** Player `%s` tried to use the username `%s` for their bot, but that player is currently in the server and using the script!", localPlayer.Name, plr.Name))
+                ShowNotification("Cannot use this username! User is in the server.", 4)
+                isSpawningBot = false
+                return
+            end
+        end
+    end
+    
+    local botName = "ROCONS_BOT_" .. localPlayer.Name
+    local botData = { Username = reqUser, Morph = SelectedBotMorph, Role = SelectedBotRole, Active = true }
+    FirebasePatch("Players/" .. localPlayer.Name .. "/Bot", botData)
+    
+    CreateBotDummy(localPlayer.Character, botName, reqUser, SelectedBotMorph, SelectedBotRole)
+    
+    local myRole = (SelectedBotRole == "S") and "D" or "S"
+    local patchLocal = { Status = "Synced", SyncPartner = "[BOT]", Role = myRole, Control = localPlayer.Name, AnimSpeed = 1.0, Morphed = true }
+    FirebasePatch("Players/" .. localPlayer.Name, patchLocal)
+    
+    StartSyncLocal("[BOT]", myRole)
+    ShowNotification("Bot spawned and synced!", 3)
+
+    task.delay(1, function()
+        isSpawningBot = false
+    end)
 end)
 
+DeleteBotBtn.MouseButton1Click:Connect(function()
+    FirebasePatch("Players/" .. localPlayer.Name .. "/Bot", { Active = false })
+    DestroyExistingBots(localPlayer.Name)
+    if syncPartner == "[BOT]" then BreakSyncLocally() end
+    ShowNotification("Bot deleted.", 3)
+end)
+
+-- BACKGROUND REFRESH & REMOTE SYNC LOOP
 task.spawn(function()
     while true do
         task.wait(2.5)
@@ -1479,189 +1876,98 @@ task.spawn(function()
                         if pData then
                             local isSameJobId = (pData.JobId == game.JobId or game.JobId == "")
                             if isSameJobId then
-                                if pData.Status == "Emoting" and pData.CurrentAnim ~= "" and pName ~= localPlayer.Name then
-                                    if not activePlayerEmotes[pName] or activePlayerEmotes[pName].AnimName ~= pData.CurrentAnim then
-                                        if activePlayerEmotes[pName] and activePlayerEmotes[pName].Track then activePlayerEmotes[pName].Track.Stop() end
-                                        if inServerPlayer.Character and emotesFolder then
-                                            local emoteKf = emotesFolder:FindFirstChild(pData.CurrentAnim)
-                                            if emoteKf then
-                                                emoteKf.Loop = true
-                                                local track = PlayKeyframeSequence(inServerPlayer.Character, emoteKf, pData.AnimSpeed or 1.0)
-                                                activePlayerEmotes[pName] = { AnimName = pData.CurrentAnim, Track = track }
+                                if pData.CustomCharId and inServerPlayer.Character then
+                                    if not inServerPlayer.Character:GetAttribute("CustomCharApplied_" .. tostring(pData.CustomCharId)) then
+                                        inServerPlayer.Character:SetAttribute("CustomCharApplied_" .. tostring(pData.CustomCharId), true)
+                                        ApplyUserAppearance(inServerPlayer.Character, pData.CustomCharId)
+                                    end
+                                end
+
+                                if pData.Bot and pData.Bot.Active then
+                                    local botName = "ROCONS_BOT_" .. pName
+                                    local botChar = Workspace:FindFirstChild(botName)
+                                    
+                                    if not botChar and inServerPlayer.Character and pName ~= localPlayer.Name then
+                                        botChar = CreateBotDummy(inServerPlayer.Character, botName, pData.Bot.Username, pData.Bot.Morph, pData.Bot.Role)
+                                    end
+                                    
+                                    if botChar and pData.Status == "Synced" and pData.SyncPartner == "[BOT]" and pData.CurrentAnim ~= "" then
+                                        if not activePlayerEmotes[botName] or activePlayerEmotes[botName].AnimName ~= pData.CurrentAnim then
+                                            if activePlayerEmotes[botName] and activePlayerEmotes[botName].Track then activePlayerEmotes[botName].Track.Stop() end
+                                            
+                                            if pName ~= localPlayer.Name then
+                                                local bRole = pData.Bot.Role 
+                                                local bFolder = animFolder:FindFirstChild(bRole)
+                                                if bFolder then
+                                                    local bSuffix = (bRole == "S") and "F" or "M"
+                                                    local bKfs = bFolder:FindFirstChild(pData.CurrentAnim .. bSuffix)
+                                                    if bKfs then
+                                                        bKfs.Loop = true
+                                                        local track = PlayKeyframeSequence(botChar, bKfs, pData.AnimSpeed or 1.0)
+                                                        activePlayerEmotes[botName] = { AnimName = pData.CurrentAnim, Track = track }
+                                                    end
+                                                end
+                                                
+                                                local pRole = pData.Role 
+                                                local pFolder = animFolder:FindFirstChild(pRole)
+                                                if pFolder and inServerPlayer.Character then
+                                                    local pSuffix = (pRole == "S") and "F" or "M"
+                                                    local pKfs = pFolder:FindFirstChild(pData.CurrentAnim .. pSuffix)
+                                                    if pKfs then
+                                                        pKfs.Loop = true
+                                                        local pTrack = PlayKeyframeSequence(inServerPlayer.Character, pKfs, pData.AnimSpeed or 1.0)
+                                                        activePlayerEmotes[pName] = { AnimName = pData.CurrentAnim, Track = pTrack }
+                                                    end
+                                                end
                                             end
                                         end
-                                    else
-                                        if activePlayerEmotes[pName] and activePlayerEmotes[pName].Track then activePlayerEmotes[pName].Track.Speed = pData.AnimSpeed or 1.0 end
-                                    end
-                                else
-                                    if activePlayerEmotes[pName] then
-                                        if activePlayerEmotes[pName].Track then activePlayerEmotes[pName].Track.Stop() end
-                                        activePlayerEmotes[pName] = nil
                                     end
                                 end
-                                
-                                if pName ~= localPlayer.Name and pData.Gender ~= "" then
-                                    if pData.Morphed then
-                                        if inServerPlayer.Character and not inServerPlayer.Character:FindFirstChild("Morph") then
-                                            local pMorph = morphsFolder:FindFirstChild(pData.Gender)
-                                            if pMorph then ApplyMorph(inServerPlayer.Character, pMorph, pData.Gender, false) end
-                                        end
-                                    else
-                                        if inServerPlayer.Character and inServerPlayer.Character:FindFirstChild("Morph") then RemoveMorph(inServerPlayer.Character) end
-                                    end
-                                end
-                                
-                                if pName ~= localPlayer.Name and pData.Gender ~= "" then
-                                    local pCard = Instance.new("Frame", PlayersTab); pCard.Size = UDim2.new(1, 0, 0, 45); pCard.BackgroundColor3 = Theme.Card; pCard.ZIndex = 7;
-                                    local pLabel = Instance.new("TextLabel", pCard); pLabel.Size = UDim2.new(0.65, -10, 1, 0); pLabel.Position = UDim2.new(0, 10, 0, 0); pLabel.Text = string.format("%s (@%s) [%s] - Age: %s", pData.DisplayName or pName, pName, pData.Gender, pData.Age or "N/A"); pLabel.Font = Enum.Font.Gotham; pLabel.TextSize = 11; pLabel.TextColor3 = Theme.TextPrimary; pLabel.TextXAlignment = Enum.TextXAlignment.Left; pLabel.BackgroundTransparency = 1; pLabel.ZIndex = 8
+
+                                -- Render Player Card in Players Tab
+                                if pName ~= localPlayer.Name then
+                                    local pFrame = Instance.new("Frame", PlayersTab)
+                                    pFrame.Size = UDim2.new(1, 0, 0, 40)
+                                    pFrame.BackgroundColor3 = Theme.Card
                                     
-                                    local reqBtn = Instance.new("TextButton", pCard); reqBtn.Size = UDim2.new(0.28, 0, 0, 28); reqBtn.Position = UDim2.new(0.68, 0, 0.5, -14); reqBtn.BackgroundColor3 = Theme.Accent; reqBtn.Font = Enum.Font.Gotham; reqBtn.TextSize = 11; reqBtn.TextColor3 = Theme.TextPrimary; reqBtn.ZIndex = 8;
+                                    local pLbl = Instance.new("TextLabel", pFrame)
+                                    pLbl.Size = UDim2.new(0.6, 0, 1, 0)
+                                    pLbl.Position = UDim2.new(0, 10, 0, 0)
+                                    pLbl.BackgroundTransparency = 1
+                                    pLbl.Font = Enum.Font.Gotham
+                                    pLbl.TextSize = 11
+                                    pLbl.TextColor3 = Theme.TextPrimary
+                                    pLbl.TextXAlignment = Enum.TextXAlignment.Left
+                                    pLbl.Text = string.format("%s [%s - %s]", inServerPlayer.DisplayName or pName, pData.Gender ~= "" and pData.Gender or "?", pData.Age ~= "" and pData.Age or "?")
+                                    
+                                    local reqBtn = Instance.new("TextButton", pFrame)
+                                    reqBtn.Size = UDim2.new(0.35, -10, 0.7, 0)
+                                    reqBtn.Position = UDim2.new(0.65, 5, 0.15, 0)
+                                    reqBtn.BackgroundColor3 = Theme.Accent
+                                    reqBtn.Text = "Request Sync"
+                                    reqBtn.Font = Enum.Font.Gotham
+                                    reqBtn.TextSize = 10
+                                    reqBtn.TextColor3 = Theme.TextPrimary
                                     AnimateButton(reqBtn)
                                     
-                                    if pData.Status == "Synced" then
-                                        reqBtn.Text = "Busy"; reqBtn.BackgroundColor3 = Theme.Panel; reqBtn.Active = false
-                                    else
-                                        reqBtn.Text = "Request"
-                                        reqBtn.MouseButton1Click:Connect(function()
-                                            local targetAge = pData.Age or ""
-                                            if not IsAgeCompatible(chosenAge, targetAge) then ShowNotification("Sync restricted: Age group incompatible.", 4) return end
-                                            local lastReq = spamCooldowns[pName] or 0
-                                            if tick() - lastReq < 6 then reqBtn.Text = "Wait..."; reqBtn.BackgroundColor3 = Theme.Danger; task.wait(1); reqBtn.Text = "Request"; reqBtn.BackgroundColor3 = Theme.Accent; return end
-                                            spamCooldowns[pName] = tick()
-                                            reqBtn.Text = "Sent"; reqBtn.BackgroundColor3 = Theme.Success
-                                            FirebasePatch("Players/" .. pName, { Request = localPlayer.Name, RequesterGender = chosenGender })
-                                        end)
-                                    end
+                                    reqBtn.MouseButton1Click:Connect(function()
+                                        if currentState == "Synced" then
+                                            ShowNotification("You are already synced!", 3)
+                                            return
+                                        end
+                                        if not IsAgeCompatible(chosenAge, pData.Age) then
+                                            ShowNotification("Age gap is incompatible!", 3)
+                                            return
+                                        end
+                                        FirebasePatch("Players/" .. pName, { Request = localPlayer.Name, RequesterGender = chosenGender })
+                                        ShowNotification("Sent sync request to " .. pName, 3)
+                                    end)
                                 end
                             end
                         end
                     end
-                    PlayersTab.CanvasSize = UDim2.new(0, 0, 0, TabFrames["Players"].Layout.AbsoluteContentSize.Y)
                 end
             end
         end
     end
-end)
-
-local function StartMainGUI(gender)
-    chosenGender = gender; GenderModal.Visible = false; MainFrame.Visible = true
-    MainFrame.Size = UDim2.new(0, 0, 0, 0); 
-    MainFrame.BackgroundTransparency = 1
-    TweenService:Create(MainFrame, TweenInfo.new(0.4, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, GUI_WIDTH, 0, GUI_HEIGHT), 
-        BackgroundTransparency = 0
-    }):Play()
-
-    FirebasePatch("Players/" .. localPlayer.Name, { Gender = gender, DisplayName = localPlayer.DisplayName, JobId = game.JobId, Age = chosenAge, Morphed = false, Control = localPlayer.Name, AnimSpeed = 1.0 })
-    
-    local stopSyncBtn = Instance.new("TextButton", AnimsTab)
-    stopSyncBtn.Size = UDim2.new(1, 0, 0, 36)
-    stopSyncBtn.BackgroundColor3 = Theme.Danger
-    stopSyncBtn.Text = "Stop Sync & Reset"
-    stopSyncBtn.Font = Enum.Font.Gotham
-    stopSyncBtn.TextSize = 12
-    stopSyncBtn.TextColor3 = Theme.TextPrimary
-    stopSyncBtn.ZIndex = 7
-    AnimateButton(stopSyncBtn)
-    stopSyncBtn.MouseButton1Click:Connect(function() 
-        if currentState == "Synced" then 
-            BreakSyncLocally() 
-        end 
-    end)
-
-    local sFolder = animFolder:FindFirstChild("S")
-    if sFolder then
-        for _, kf in ipairs(sFolder:GetChildren()) do
-            if kf:IsA("KeyframeSequence") then
-                local animBaseName = kf.Name:sub(1, -2) 
-                local btn = Instance.new("TextButton", AnimsTab); btn.Size = UDim2.new(1, 0, 0, 36); btn.BackgroundColor3 = Theme.Card; btn.Text = animBaseName; btn.Font = Enum.Font.Gotham; btn.TextSize = 12; btn.TextColor3 = Theme.TextPrimary; btn.ZIndex = 7;
-                AnimateButton(btn)
-                btn.MouseButton1Click:Connect(function()
-                    if currentState == "Synced" then
-                        if currentControl ~= localPlayer.Name then ShowNotification("You don't have control!", 2) return end
-                        
-                        currentlyPlayingAnim = animBaseName 
-                        PlaySyncedAnimationsLocally(animBaseName)
-                        
-                        FirebasePatch("Players/" .. localPlayer.Name, { CurrentAnim = animBaseName, AnimSpeed = currentAnimSpeed })
-                        if syncPartner ~= "" then FirebasePatch("Players/" .. syncPartner, { CurrentAnim = animBaseName, AnimSpeed = currentAnimSpeed }) end
-                    end
-                end)
-            end
-        end
-    end
-    AnimsTab.CanvasSize = UDim2.new(0, 0, 0, TabFrames["Anims"].Layout.AbsoluteContentSize.Y)
-
-    local stopEmoteBtn = Instance.new("TextButton", EmotesTab); stopEmoteBtn.Size = UDim2.new(1, 0, 0, 36); stopEmoteBtn.BackgroundColor3 = Theme.Danger; stopEmoteBtn.Text = "Stop Emote & Reset"; stopEmoteBtn.Font = Enum.Font.Gotham; stopEmoteBtn.TextSize = 12; stopEmoteBtn.TextColor3 = Theme.TextPrimary; stopEmoteBtn.ZIndex = 7;
-    AnimateButton(stopEmoteBtn)
-    stopEmoteBtn.MouseButton1Click:Connect(function() if currentState == "Synced" then BreakSyncLocally() else StopEmote() end end)
-
-    if emotesFolder then
-        for _, kf in ipairs(emotesFolder:GetChildren()) do
-            if kf:IsA("KeyframeSequence") then
-                local btn = Instance.new("TextButton", EmotesTab); btn.Size = UDim2.new(1, 0, 0, 36); btn.BackgroundColor3 = Theme.Card; btn.Text = kf.Name; btn.Font = Enum.Font.Gotham; btn.TextSize = 12; btn.TextColor3 = Theme.TextPrimary; btn.ZIndex = 7;
-                AnimateButton(btn)
-                btn.MouseButton1Click:Connect(function()
-                    if currentState == "Synced" then return end
-                    StopEmote()
-                    if localPlayer.Character then
-                        local myHRP = localPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        local hum = localPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if myHRP then myHRP.Anchored = true end
-                        if hum then hum.WalkSpeed = 0 end 
-                        kf.Loop = true
-                        
-                        soloEmoteTrack = PlayKeyframeSequence(localPlayer.Character, kf, currentAnimSpeed)
-                        currentState = "Emoting"
-                        FirebasePatch("Players/" .. localPlayer.Name, { Status = "Emoting", CurrentAnim = kf.Name, AnimSpeed = currentAnimSpeed })
-                    end
-                end)
-            end
-        end
-    end
-    EmotesTab.CanvasSize = UDim2.new(0, 0, 0, TabFrames["Emotes"].Layout.AbsoluteContentSize.Y)
-end
-
-local IgnoreCard = Instance.new("Frame", SettingsTab); IgnoreCard.Size = UDim2.new(1, 0, 0, 45); IgnoreCard.BackgroundColor3 = Theme.Card; IgnoreCard.ZIndex = 7;
-local IgnoreLabel = Instance.new("TextLabel", IgnoreCard); IgnoreLabel.Size = UDim2.new(0.65, -10, 1, 0); IgnoreLabel.Position = UDim2.new(0, 10, 0, 0); IgnoreLabel.Text = "Block Incoming Requests"; IgnoreLabel.Font = Enum.Font.Gotham; IgnoreLabel.TextSize = 12; IgnoreLabel.TextColor3 = Theme.TextPrimary; IgnoreLabel.TextXAlignment = Enum.TextXAlignment.Left; IgnoreLabel.BackgroundTransparency = 1; IgnoreLabel.ZIndex = 8
-local IgnoreToggleBtn = Instance.new("TextButton", IgnoreCard); IgnoreToggleBtn.Size = UDim2.new(0.25, 0, 0, 26); IgnoreToggleBtn.Position = UDim2.new(0.7, 0, 0.5, -13); IgnoreToggleBtn.BackgroundColor3 = Theme.Panel; IgnoreToggleBtn.Text = "Off"; IgnoreToggleBtn.Font = Enum.Font.Gotham; IgnoreToggleBtn.TextSize = 11; IgnoreToggleBtn.TextColor3 = Theme.Danger; IgnoreToggleBtn.ZIndex = 8;
-AnimateButton(IgnoreToggleBtn); IgnoreToggleBtn.MouseButton1Click:Connect(function() ignoreRequests = not ignoreRequests; IgnoreToggleBtn.Text = ignoreRequests and "On" or "Off"; IgnoreToggleBtn.TextColor3 = ignoreRequests and Theme.Success or Theme.Danger end)
-
-local OverheadCard = Instance.new("Frame", SettingsTab); OverheadCard.Size = UDim2.new(1, 0, 0, 45); OverheadCard.BackgroundColor3 = Theme.Card; OverheadCard.ZIndex = 7;
-local OverheadLabel = Instance.new("TextLabel", OverheadCard); OverheadLabel.Size = UDim2.new(0.65, -10, 1, 0); OverheadLabel.Position = UDim2.new(0, 10, 0, 0); OverheadLabel.Text = "Overhead GUI Display"; OverheadLabel.Font = Enum.Font.Gotham; OverheadLabel.TextSize = 12; OverheadLabel.TextColor3 = Theme.TextPrimary; OverheadLabel.TextXAlignment = Enum.TextXAlignment.Left; OverheadLabel.BackgroundTransparency = 1; OverheadLabel.ZIndex = 8
-local OverheadToggleBtn = Instance.new("TextButton", OverheadCard); OverheadToggleBtn.Size = UDim2.new(0.25, 0, 0, 26); OverheadToggleBtn.Position = UDim2.new(0.7, 0, 0.5, -13); OverheadToggleBtn.BackgroundColor3 = Theme.Panel; OverheadToggleBtn.Text = "On"; OverheadToggleBtn.Font = Enum.Font.Gotham; OverheadToggleBtn.TextSize = 11; OverheadToggleBtn.TextColor3 = Theme.Success; OverheadToggleBtn.ZIndex = 8;
-AnimateButton(OverheadToggleBtn); OverheadToggleBtn.MouseButton1Click:Connect(function() showOverheadGui = not showOverheadGui; OverheadToggleBtn.Text = showOverheadGui and "On" or "Off"; OverheadToggleBtn.TextColor3 = showOverheadGui and Theme.Success or Theme.Danger end)
-
-local SpamCard = Instance.new("Frame", SettingsTab); SpamCard.Size = UDim2.new(1, 0, 0, 55); SpamCard.BackgroundColor3 = Theme.Card; SpamCard.ZIndex = 7;
-local SpamLabel = Instance.new("TextLabel", SpamCard); SpamLabel.Size = UDim2.new(1, -20, 1, 0); SpamLabel.Position = UDim2.new(0, 10, 0, 0); SpamLabel.Text = "Anti-Spam Active\nIncoming request cooldown set to 6 seconds per user."; SpamLabel.Font = Enum.Font.Gotham; SpamLabel.TextSize = 11; SpamLabel.TextColor3 = Theme.TextSecondary; SpamLabel.TextXAlignment = Enum.TextXAlignment.Left; SpamLabel.BackgroundTransparency = 1; SpamLabel.TextWrapped = true; SpamLabel.ZIndex = 8
-SettingsTab.CanvasSize = UDim2.new(0, 0, 0, TabFrames["Settings"].Layout.AbsoluteContentSize.Y)
-
-AgeConfirm.MouseButton1Click:Connect(function()
-    chosenAge = currentAgeVal >= 21 and "21+" or tostring(currentAgeVal)
-    AgeModal.Visible = false
-    GenderModal.Visible = true
-    GenderModal.Size = UDim2.new(0, 0, 0, 0); GenderModal.Position = UDim2.new(0.5, 0, 0.5, 0)
-    TweenService:Create(GenderModal, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-        Size = UDim2.new(0, 300, 0, 220), Position = UDim2.new(0.5, -150, 0.5, -110)
-    }):Play()
-    SendWebhook(string.format("👤 **Age Selected:** Player `%s` set their age to `%s`.", localPlayer.Name, chosenAge))
-end)
-
-local function CreateGenderBtn(text, pos, genderCode)
-    local btn = Instance.new("TextButton", GenderModal); btn.Size = UDim2.new(0, 125, 0, 45); btn.Position = pos; btn.BackgroundColor3 = Theme.Card; btn.Text = text; btn.Font = Enum.Font.Gotham; btn.TextSize = 13; btn.TextColor3 = Theme.TextPrimary; btn.ZIndex = 51;
-    AnimateButton(btn); btn.MouseButton1Click:Connect(function() StartMainGUI(genderCode) end)
-end
-
-CreateGenderBtn("Female (F)", UDim2.new(0, 18, 0, 60), "F")
-CreateGenderBtn("F-Boy (FB)", UDim2.new(0, 157, 0, 60), "FB")
-CreateGenderBtn("Male (M)", UDim2.new(0, 18, 0, 125), "M")
-CreateGenderBtn("F-F (FF)", UDim2.new(0, 157, 0, 125), "FF")
-
-localPlayer.CharacterAdded:Connect(function()
-    chosenGender = ""; currentState = "Idle"; isMorphed = false
-    MorphToggleBtn.Text = "Morph: Off"; MorphToggleBtn.BackgroundColor3 = Theme.Card
-    MainFrame.Visible = false
-    
-    if chosenAge == "" then AgeModal.Visible = true; GenderModal.Visible = false else AgeModal.Visible = false; GenderModal.Visible = true end
-    FirebasePatch("Players/" .. localPlayer.Name, { Gender = "", Status = "Idle", CurrentAnim = "", Morphed = false })
 end)
