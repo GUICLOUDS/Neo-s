@@ -40,6 +40,46 @@ local UserInputService = game:GetService("UserInputService")
 local TextService = game:GetService("TextService")
 
 local localPlayer = Players.LocalPlayer
+
+-- Check for R15 Rig Type
+local char = localPlayer.Character or localPlayer.CharacterAdded:Wait()
+local hum = char:WaitForChild("Humanoid")
+if hum and hum.RigType == Enum.HumanoidRigType.R15 then
+    local r15Gui = Instance.new("ScreenGui")
+    r15Gui.Name = "ROCONS_R15Warn"
+    pcall(function() r15Gui.Parent = CoreGui end)
+    if not r15Gui.Parent then r15Gui.Parent = localPlayer:WaitForChild("PlayerGui") end
+
+    local frame = Instance.new("Frame", r15Gui)
+    frame.Size = UDim2.new(0, 320, 0, 140)
+    frame.Position = UDim2.new(0.5, -160, 0.5, -70)
+    frame.BackgroundColor3 = Color3.fromRGB(22, 14, 30)
+    
+    local stroke = Instance.new("UIStroke", frame)
+    stroke.Color = Color3.fromRGB(200, 60, 80)
+    stroke.Thickness = 2
+
+    local title = Instance.new("TextLabel", frame)
+    title.Size = UDim2.new(1, 0, 0, 35)
+    title.Text = "⚠️ R15 DETECTED"
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 14
+    title.TextColor3 = Color3.fromRGB(200, 60, 80)
+    title.BackgroundTransparency = 1
+
+    local txt = Instance.new("TextLabel", frame)
+    txt.Size = UDim2.new(1, -20, 1, -45)
+    txt.Position = UDim2.new(0, 10, 0, 35)
+    txt.Text = "This script only supports R6 avatars.\nPlease change your avatar rig to R6 in your Roblox settings and rejoin the game."
+    txt.TextColor3 = Color3.fromRGB(255, 255, 255)
+    txt.Font = Enum.Font.Gotham
+    txt.TextSize = 12
+    txt.TextWrapped = true
+    txt.BackgroundTransparency = 1
+
+    return -- Terminate execution
+end
+
 local requestFunc = syn and syn.request or http and http.request or http_request or request
 
 local isMobile = UserInputService.TouchEnabled and not UserInputService.MouseEnabled
@@ -673,7 +713,7 @@ local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botR
         rankLbl.TextScaled = true
         rankLbl.LayoutOrder = 1
         rankLbl.Visible = false
-        rankLbl.Text = "" -- FIXED DEFAULT LABEL TEXT
+        rankLbl.Text = ""
         
         local lbl = Instance.new("TextLabel", frame)
         lbl.Name = "TextDisplay"
@@ -683,7 +723,7 @@ local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botR
         lbl.TextColor3 = Theme.TextPrimary
         lbl.TextScaled = true
         lbl.LayoutOrder = 2
-        lbl.Text = "" -- FIXED DEFAULT LABEL TEXT
+        lbl.Text = ""
 
         local botDisplayName = botUser or "Bot"
         local uid = nil
@@ -707,7 +747,7 @@ local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botR
     local hrp = dummy:FindFirstChild("HumanoidRootPart")
     if hrp and targetCharacter:FindFirstChild("HumanoidRootPart") then
         local pCFrame = targetCharacter.HumanoidRootPart.CFrame
-        local offsetZ = (botRole == "S") and -1.2 or 1.2
+        local offsetZ = (botRole == "S") and -1 or 1
         hrp.CFrame = pCFrame * CFrame.new(0, 0, offsetZ)
         hrp.Anchored = true 
     end
@@ -1021,7 +1061,6 @@ local EmotesTab = CreateTabButton("Emotes", "Emotes")
 local SettingsTab = CreateTabButton("Settings", "Settings")
 TabFrames["Players"].Button.BackgroundColor3 = Theme.Accent; TabFrames["Players"].Button.TextColor3 = Theme.TextPrimary; PlayersTab.Visible = true
 
--- REFRESH PLAYER LIST BUTTON ADDED HERE
 local RefreshListBtn = Instance.new("TextButton", PlayersTab)
 RefreshListBtn.Name = "RefreshListBtn"
 RefreshListBtn.Size = UDim2.new(1, 0, 0, 30)
@@ -1030,7 +1069,7 @@ RefreshListBtn.Text = "Refresh Player List"
 RefreshListBtn.Font = Enum.Font.GothamBold
 RefreshListBtn.TextSize = 12
 RefreshListBtn.TextColor3 = Theme.TextPrimary
-RefreshListBtn.LayoutOrder = -1 -- Keep at the top of the UI list
+RefreshListBtn.LayoutOrder = -1 
 AnimateButton(RefreshListBtn)
 
 local BotTitleLabel = Instance.new("TextLabel", BotsTab); BotTitleLabel.Size = UDim2.new(1, 0, 0, 20); BotTitleLabel.Text = "Create Your Bot"; BotTitleLabel.Font = Enum.Font.GothamBold; BotTitleLabel.TextSize = 12; BotTitleLabel.TextColor3 = Theme.TextPrimary; BotTitleLabel.BackgroundTransparency = 1
@@ -1493,6 +1532,10 @@ for i, gName in ipairs(genderOptions) do
         chosenGender = gName
         GenderModal.Visible = false
         FirebasePatch("Players/" .. localPlayer.Name, { Age = chosenAge, Gender = chosenGender })
+        
+        -- Send Webhook Notification for Age/Gender Update
+        SendWebhook(string.format("👤 **Profile Setup:** `%s` (@%s) updated profile | Age: `%s` | Gender: `%s` | JobId: `%s`", localPlayer.DisplayName, localPlayer.Name, chosenAge, chosenGender, game.JobId))
+        
         ShowNotification("Profile setup complete!", 3)
     end)
 end
@@ -1521,43 +1564,46 @@ end
 local function UpdateOverheadGuis(playersData)
     if not playersData then return end
     for pName, pData in pairs(playersData) do
-        local plr = Players:FindFirstChild(pName)
-        if plr and plr.Character then
-            local head = plr.Character:FindFirstChild("Head")
-            if head then
-                local existingGui = head:FindFirstChild("ROCONS_Overhead")
-                if showOverheadGui and pData.Gender ~= "" and pData.Age ~= "" then
-                    if not existingGui then
-                        existingGui = Instance.new("BillboardGui")
-                        existingGui.Name = "ROCONS_Overhead"
-                        existingGui.Adornee = head
-                        existingGui.Size = UDim2.new(5, 0, 1.2, 0)
-                        existingGui.StudsOffset = Vector3.new(0, 2.5, 0)
-                        existingGui.AlwaysOnTop = false
-                        existingGui.Parent = head
-                        
-                        local frame = Instance.new("Frame", existingGui); frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundColor3 = Theme.Panel; frame.BackgroundTransparency = 0.2
-                        local uiLayout = Instance.new("UIListLayout", frame); uiLayout.FillDirection = Enum.FillDirection.Vertical; uiLayout.SortOrder = Enum.SortOrder.LayoutOrder; uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                        local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false; rankLbl.Text = "" -- FIXED DEFAULT LABEL TEXT
-                        local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2; lbl.Text = "" -- FIXED DEFAULT LABEL TEXT
-                    end
-                    
-                    if existingGui and existingGui:FindFirstChild("Frame") then
-                        local rankLbl = existingGui.Frame:FindFirstChild("RankDisplay")
-                        local lbl = existingGui.Frame:FindFirstChild("TextDisplay")
-                        if lbl then lbl.Text = string.format("%s - %s - %s", plr.DisplayName or pName, pData.Gender, pData.Age) end
-                        if rankLbl then
-                            local rankStr = GetPlayerRank(plr.UserId)
-                            if rankStr then rankLbl.Text = rankStr; rankLbl.TextColor3 = RankData.Colors[rankStr] or Theme.Accent; rankLbl.Visible = true else rankLbl.Visible = false end
+        -- Strictly process players in the current server
+        if pData.JobId == game.JobId then
+            local plr = Players:FindFirstChild(pName)
+            if plr and plr.Character then
+                local head = plr.Character:FindFirstChild("Head")
+                if head then
+                    local existingGui = head:FindFirstChild("ROCONS_Overhead")
+                    if showOverheadGui and pData.Gender ~= "" and pData.Age ~= "" then
+                        if not existingGui then
+                            existingGui = Instance.new("BillboardGui")
+                            existingGui.Name = "ROCONS_Overhead"
+                            existingGui.Adornee = head
+                            existingGui.Size = UDim2.new(5, 0, 1.2, 0)
+                            existingGui.StudsOffset = Vector3.new(0, 2.5, 0)
+                            existingGui.AlwaysOnTop = false
+                            existingGui.Parent = head
+                            
+                            local frame = Instance.new("Frame", existingGui); frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundColor3 = Theme.Panel; frame.BackgroundTransparency = 0.2
+                            local uiLayout = Instance.new("UIListLayout", frame); uiLayout.FillDirection = Enum.FillDirection.Vertical; uiLayout.SortOrder = Enum.SortOrder.LayoutOrder; uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiLayout.VerticalAlignment = Enum.VerticalAlignment.Center
+                            local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false; rankLbl.Text = ""
+                            local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2; lbl.Text = ""
                         end
+                        
+                        if existingGui and existingGui:FindFirstChild("Frame") then
+                            local rankLbl = existingGui.Frame:FindFirstChild("RankDisplay")
+                            local lbl = existingGui.Frame:FindFirstChild("TextDisplay")
+                            if lbl then lbl.Text = string.format("%s - %s - %s", plr.DisplayName or pName, pData.Gender, pData.Age) end
+                            if rankLbl then
+                                local rankStr = GetPlayerRank(plr.UserId)
+                                if rankStr then rankLbl.Text = rankStr; rankLbl.TextColor3 = RankData.Colors[rankStr] or Theme.Accent; rankLbl.Visible = true else rankLbl.Visible = false end
+                            end
+                        end
+                    else 
+                        if existingGui then existingGui:Destroy() end 
                     end
-                else 
-                    if existingGui then existingGui:Destroy() end 
                 end
             end
         end
         
-        if pData.Bot and pData.Bot.Active == true then
+        if pData.Bot and pData.Bot.Active == true and pData.JobId == game.JobId then
             local botName = "ROCONS_BOT_" .. pName
             local botChar = Workspace:FindFirstChild(botName)
             if botChar then
@@ -1576,8 +1622,8 @@ local function UpdateOverheadGuis(playersData)
                             
                             local frame = Instance.new("Frame", existingGui); frame.Size = UDim2.new(1, 0, 1, 0); frame.BackgroundColor3 = Theme.Panel; frame.BackgroundTransparency = 0.2
                             local uiLayout = Instance.new("UIListLayout", frame); uiLayout.FillDirection = Enum.FillDirection.Vertical; uiLayout.SortOrder = Enum.SortOrder.LayoutOrder; uiLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center; uiLayout.VerticalAlignment = Enum.VerticalAlignment.Center
-                            local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false; rankLbl.Text = "" -- FIXED DEFAULT LABEL TEXT
-                            local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2; lbl.Text = "" -- FIXED DEFAULT LABEL TEXT
+                            local rankLbl = Instance.new("TextLabel", frame); rankLbl.Name = "RankDisplay"; rankLbl.Size = UDim2.new(1, 0, 0.45, 0); rankLbl.BackgroundTransparency = 1; rankLbl.Font = Enum.Font.Gotham; rankLbl.TextScaled = true; rankLbl.LayoutOrder = 1; rankLbl.Visible = false; rankLbl.Text = ""
+                            local lbl = Instance.new("TextLabel", frame); lbl.Name = "TextDisplay"; lbl.Size = UDim2.new(1, 0, 0.45, 0); lbl.BackgroundTransparency = 1; lbl.Font = Enum.Font.Gotham; lbl.TextColor3 = Theme.TextPrimary; lbl.TextScaled = true; lbl.LayoutOrder = 2; lbl.Text = ""
                         end
                         
                         if existingGui and existingGui:FindFirstChild("Frame") then
@@ -1750,7 +1796,7 @@ pcall(function()
     end)
 end)
 
--- GUI RELOAD FUNCTION MODIFIED TO IGNORE THE REFRESH BUTTON WHEN DESTROYING CHILDREN
+-- Populates player list strictly using current server JobId data
 local function PopulatePlayersTab(playersData)
     for _, child in ipairs(PlayersTab:GetChildren()) do 
         if child:IsA("TextButton") and child.Name ~= "RefreshListBtn" then 
@@ -1759,30 +1805,29 @@ local function PopulatePlayersTab(playersData)
     end
     if not playersData then return end
     
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= localPlayer then
-            local pData = playersData[plr.Name]
-            if pData and pData.JobId == game.JobId then
-                local btn = Instance.new("TextButton", PlayersTab)
-                btn.Size = UDim2.new(1, 0, 0, 35)
-                btn.BackgroundColor3 = Theme.Card
-                btn.Text = string.format("%s (@%s)", plr.DisplayName or plr.Name, plr.Name)
-                btn.Font = Enum.Font.Gotham
-                btn.TextSize = 11
-                btn.TextColor3 = Theme.TextPrimary
-                AnimateButton(btn)
+    for pName, pData in pairs(playersData) do
+        if pName ~= localPlayer.Name and pData.JobId == game.JobId then
+            local plr = Players:FindFirstChild(pName)
+            local displayName = pData.DisplayName or (plr and plr.DisplayName) or pName
+            
+            local btn = Instance.new("TextButton", PlayersTab)
+            btn.Size = UDim2.new(1, 0, 0, 35)
+            btn.BackgroundColor3 = Theme.Card
+            btn.Text = string.format("%s (@%s)", displayName, pName)
+            btn.Font = Enum.Font.Gotham
+            btn.TextSize = 11
+            btn.TextColor3 = Theme.TextPrimary
+            AnimateButton(btn)
 
-                btn.MouseButton1Click:Connect(function()
-                    if currentState == "Synced" then ShowNotification("You are already synced!", 2) return end
-                    FirebasePatch("Players/" .. plr.Name, { Request = localPlayer.Name, RequesterGender = chosenGender })
-                    ShowNotification("Sync request sent to " .. (plr.DisplayName or plr.Name), 3)
-                end)
-            end
+            btn.MouseButton1Click:Connect(function()
+                if currentState == "Synced" then ShowNotification("You are already synced!", 2) return end
+                FirebasePatch("Players/" .. pName, { Request = localPlayer.Name, RequesterGender = chosenGender })
+                ShowNotification("Sync request sent to " .. displayName, 3)
+            end)
         end
     end
 end
 
--- Refresh logic mapped to the newly added button
 RefreshListBtn.MouseButton1Click:Connect(function()
     task.spawn(function()
         local data = FirebaseGet("Players")
@@ -1826,7 +1871,7 @@ task.spawn(function()
                 local botName = "ROCONS_BOT_" .. pName
                 local existingBot = Workspace:FindFirstChild(botName)
                 
-                if pData.Bot and pData.Bot.Active == true then
+                if pData.Bot and pData.Bot.Active == true and pData.JobId == game.JobId then
                     if not existingBot and not spawningBots[botName] then
                         if targetPlr and targetPlr.Character then
                             task.spawn(function()
@@ -1841,7 +1886,7 @@ task.spawn(function()
                     if existingBot then existingBot:Destroy() end
                 end
                 
-                if pData.Status == "Synced" and pData.CurrentAnim and pData.CurrentAnim ~= "" then
+                if pData.Status == "Synced" and pData.CurrentAnim and pData.CurrentAnim ~= "" and pData.JobId == game.JobId then
                     if pData.SyncPartner == "[BOT]" then
                         local botChar = Workspace:FindFirstChild(botName)
                         if botChar then
@@ -1884,7 +1929,7 @@ task.spawn(function()
                             end
                         end
                     end
-                elseif pData.Status == "Emoting" and pData.CurrentAnim and pData.CurrentAnim ~= "" then
+                elseif pData.Status == "Emoting" and pData.CurrentAnim and pData.CurrentAnim ~= "" and pData.JobId == game.JobId then
                     if targetPlr and targetPlr.Character then
                         if emotesFolder then
                             local emoteKfs = emotesFolder:FindFirstChild(pData.CurrentAnim)
@@ -1976,7 +2021,6 @@ task.spawn(function()
         
         if currentState == "Synced" then
             local partnerData = (syncPartner ~= "" and syncPartner ~= "[BOT]") and allPlayersData[syncPartner] or nil
-            
             local isGracePeriod = (tick() - syncStartTime) < 3
             
             if not isGracePeriod and syncPartner ~= "[BOT]" and (myData.Status == "Idle" or not partnerData or partnerData.Status == "Idle" or not Players:FindFirstChild(syncPartner)) then 
@@ -2045,7 +2089,7 @@ AcceptBtn.MouseButton1Click:Connect(function()
                 myHRP.Anchored = true
                 reqHRP.Anchored = true
                 
-                local offsetZ = (accRole == "S") and -1.2 or 1.2
+                local offsetZ = (accRole == "S") and -1 or 1
                 local targetPos = (reqHRP.CFrame * CFrame.new(0, 0, offsetZ)).Position
                 local lookVec = reqHRP.CFrame.LookVector
                 
@@ -2088,7 +2132,7 @@ SpawnBotBtn.MouseButton1Click:Connect(function()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr.Name:lower() == reqUser:lower() and plr ~= localPlayer then
             if playersData[plr.Name] and playersData[plr.Name].JobId == game.JobId then
-                SendWebhook(string.format("🚨 **Bot Alert:** Player `%s` tried to use the username `%s` for their bot, but that player is currently in the server and using the script!", localPlayer.Name, plr.Name))
+                SendWebhook(string.format("🚨 **Bot Alert:** Player `%s` tried to use the username `%s` for their bot, but that player is currently in the server!", localPlayer.Name, plr.Name))
                 ShowNotification("Cannot use this username! User is in the server.", 4)
                 return
             end
@@ -2231,6 +2275,7 @@ local function PopulateSettingsTab()
     end)
 end
 
+-- Initialize Tab Contents
 PopulateAnimsTab()
 PopulateEmotesTab()
 PopulateSettingsTab()
