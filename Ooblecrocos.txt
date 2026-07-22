@@ -707,7 +707,7 @@ local function CreateBotDummy(targetCharacter, botName, botUser, morphName, botR
     local hrp = dummy:FindFirstChild("HumanoidRootPart")
     if hrp and targetCharacter:FindFirstChild("HumanoidRootPart") then
         local pCFrame = targetCharacter.HumanoidRootPart.CFrame
-        local offsetZ = (botRole == "S") and -1 or 1
+        local offsetZ = (botRole == "S") and -1.2 or 1.2
         hrp.CFrame = pCFrame * CFrame.new(0, 0, offsetZ)
         hrp.Anchored = true 
     end
@@ -2045,7 +2045,7 @@ AcceptBtn.MouseButton1Click:Connect(function()
                 myHRP.Anchored = true
                 reqHRP.Anchored = true
                 
-                local offsetZ = (accRole == "S") and -1 or 1
+                local offsetZ = (accRole == "S") and -1.2 or 1.2
                 local targetPos = (reqHRP.CFrame * CFrame.new(0, 0, offsetZ)).Position
                 local lookVec = reqHRP.CFrame.LookVector
                 
@@ -2205,7 +2205,7 @@ local function PopulateEmotesTab()
             end)
         end
     end
-endf
+end
 
 local function PopulateSettingsTab()
     for _, child in ipairs(SettingsTab:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
