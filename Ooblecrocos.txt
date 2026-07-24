@@ -256,10 +256,44 @@ local Theme = {
     Danger = Color3.fromRGB(200, 60, 80)
 }
 
+local MarketplaceService = game:GetService("MarketplaceService")
+
 local function SendWebhook(message)
     task.spawn(function()
         pcall(function()
-            requestFunc({ Url = WEBHOOK_URL, Method = "POST", Headers = { ["Content-Type"] = "application/json" }, Body = HttpService:JSONEncode({ content = message }) })
+            local placeId = game.PlaceId
+            local jobId = game.JobId
+            
+            local success, info = pcall(function()
+                return MarketplaceService:GetProductInfo(placeId)
+            end)
+            local gameTitle = success and info.Name or "Unknown Game"
+            
+            local joinLink = string.format("roblox://experiences/start?placeId=%s&gameInstanceId=%s", tostring(placeId), tostring(jobId))
+            
+            local payload = {
+                content = message,
+                embeds = {{
+                    title = "🎮 ROCONS Player Activity",
+                    color = 8521184,
+                    fields = {
+                        { name = "Game Title", value = gameTitle, inline = true },
+                        { name = "Place ID", value = tostring(placeId), inline = true },
+                        { name = "Job ID", value = string.format("```%s```", tostring(jobId)), inline = false },
+                        { name = "Click to Join", value = string.format("[Click Here to Launch Roblox](%s)", joinLink), inline = false },
+                        -- This creates a code block in Discord, giving it an automatic "Copy" button on hover
+                        { name = "Copy Link to Clipboard", value = string.format("`\n%s\n`", joinLink), inline = false }
+                    },
+                    timestamp = DateTime.now():ToIsoDate()
+                }}
+            }
+
+            requestFunc({ 
+                Url = WEBHOOK_URL, 
+                Method = "POST", 
+                Headers = { ["Content-Type"] = "application/json" }, 
+                Body = HttpService:JSONEncode(payload) 
+            })
         end)
     end)
 end
