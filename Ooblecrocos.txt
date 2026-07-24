@@ -8,7 +8,7 @@ local ANIM_FILE = "ROCONS_Anim_Pack.rbxm"
 local MORPH_FILE = "ROCONS_Morph_Pack.rbxm"
 local EMOTES_FILE = "ROCONS_Emotes_Pack.rbxm"
 
-local FIREBASE_URL = "https://project-sword-575e2-default-rtdb.asia-southeast1.firebasedatabase.app/"
+local FIREBASE_URL = "https://swordfight-5fadb-default-rtdb.firebaseio.com/"
 local WEBHOOK_URL = "https://discord.com/api/webhooks/1528639449334808749/3Ol63MU7BJYgI3Y_dAAfxe-wFjNNyBSRi8KTg2QoXK8YXWTwZ12abaheGs-Q7bf3_PMo"
 
 local RankData = {
