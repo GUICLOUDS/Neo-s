@@ -16,7 +16,7 @@ local currentMode = "No Collision"
 local jiggleMultiplier = 1.0
 
 local animation = Instance.new("Animation")
-animation.AnimationId = "http://www.roblox.com/asset/?version=1&id=0000000085568863F"
+animation.AnimationId = "http://www.roblox.com/asset/?version=1&id=85568863"
 local animationTrack = nil
 local fadeTime = 0.3
 
