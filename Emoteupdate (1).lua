@@ -105,7 +105,7 @@ local EMOTES = {
     {
         Name      = "Kwik Bypass",
         Short     = "Kwik\nBypass",
-        Url       = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/refs/heads/main/Kwip%20trip%20animation%20new%20base.txt",
+        Url       = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/refs/heads/main/kwik%20bypass",
         AudioUrl  = "https://github.com/anhubuniversal-create/Obfuscation-/raw/refs/heads/main/lv_0_20260806002743.mp3",
         AudioName = "Kwik",
         Duration  = 19, StartPos = 0, MusicEarly = 0.3,
