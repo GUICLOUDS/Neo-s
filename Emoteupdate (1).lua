@@ -102,6 +102,14 @@ local EMOTES = {
         AudioName = "Hakari",
         Duration  = 19, StartPos = 0, MusicEarly = 0.1,
     },
+    {
+        Name      = "Kwik Bypass",
+        Short     = "Kwik\nBypass",
+        Url       = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/refs/heads/main/Kwip%20trip%20animation%20new%20base.txt",
+        AudioUrl  = "https://github.com/anhubuniversal-create/Obfuscation-/raw/refs/heads/main/lv_0_20260806002743.mp3",
+        AudioName = "Kwik",
+        Duration  = 19, StartPos = 0, MusicEarly = 0.3,
+    },
 }
 local TotalPages   = math.max(1, math.ceil(#EMOTES / MAX_PER_PAGE))
 local CurrentPage  = 1
