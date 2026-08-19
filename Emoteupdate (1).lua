@@ -31,6 +31,23 @@ local EMOTES = {
         Duration  = 10, StartPos = 0, MusicEarly = 0.01,
     },
     {
+        Name      = "Headlock",
+        Short     = "Headlock",
+        AnimationId = 115314801778772,
+        AnimationSpeed = 1,
+        DirectAnimation = true,
+        MoveLock = true,
+    },
+    {
+        Name      = "Tenna Dance",
+        Short     = "Tenna\nDance",
+        AnimationId = 75202452138001,
+        AnimationSpeed = 1.524,
+        DirectAnimation = true,
+        MoveLock = true,
+    },
+
+    {
         Name      = "Looping the Rooms",
         Short     = "Looping\nRooms",
         Url       = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/refs/heads/main/Looping%20the%20rooms%20animation%20new%20base.txt",
@@ -137,12 +154,14 @@ LocalPlayer.CharacterAdded:Connect(function(newChar)
     Character.Archivable = true
 end)
 for _, e in ipairs(EMOTES) do
-    task.spawn(function()
-        ScriptCache[e.Name] = game:HttpGet(e.Url)
-        local fn = "ewv5_" .. e.AudioName .. ".mp3"
-        if not isfile(fn) then writefile(fn, game:HttpGet(e.AudioUrl)) end
-        e.LocalAudioId = getAsset(fn)
-    end)
+    if not e.DirectAnimation then
+        task.spawn(function()
+            ScriptCache[e.Name] = game:HttpGet(e.Url)
+            local fn = "ewv5_" .. e.AudioName .. ".mp3"
+            if not isfile(fn) then writefile(fn, game:HttpGet(e.AudioUrl)) end
+            e.LocalAudioId = getAsset(fn)
+        end)
+    end
 end
 local function CancelActiveEmote()
     if ActiveToken then
@@ -159,10 +178,17 @@ local function CancelActiveEmote()
         local hum = ActiveToken.humanoid
         if hum then
             pcall(function()
+                if ActiveToken.directTrack then
+                    ActiveToken.directTrack:Stop(0)
+                end
                 hum.PlatformStand = false
                 hum.Sit           = ActiveToken.oldSit or false
                 hum.AutoRotate    = ActiveToken.oldAutoRotate ~= nil
                     and ActiveToken.oldAutoRotate or true
+                if ActiveToken.oldWalkSpeed ~= nil then hum.WalkSpeed = ActiveToken.oldWalkSpeed end
+                if ActiveToken.oldUseJumpPower ~= nil then hum.UseJumpPower = ActiveToken.oldUseJumpPower end
+                if ActiveToken.oldJumpPower ~= nil then hum.JumpPower = ActiveToken.oldJumpPower end
+                if ActiveToken.oldJumpHeight ~= nil then hum.JumpHeight = ActiveToken.oldJumpHeight end
             end)
         end
         if ActiveToken.restoreGhost then
@@ -195,6 +221,12 @@ local function NewToken()
         hrp         = nil,
         oldSit      = nil,
         oldAutoRotate = nil,
+        oldWalkSpeed = nil,
+        oldJumpPower = nil,
+        oldJumpHeight = nil,
+        oldUseJumpPower = nil,
+        directAnimation = false,
+        directTrack = nil,
         restoreGhost  = nil,
         checkpoint    = nil,
     }
@@ -383,6 +415,55 @@ local function ExecEmote(e)
     end
     IsEmoting = true
     ShowNotification(e.Name, not NoMusicEnabled)
+
+    if e.DirectAnimation then
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hum then
+            IsEmoting = false
+            EmoteOrigin = nil
+            ActiveToken = nil
+            return
+        end
+
+        token.humanoid = hum
+        token.hrp = char:FindFirstChild("HumanoidRootPart")
+        token.oldSit = hum.Sit
+        token.oldAutoRotate = hum.AutoRotate
+        token.oldWalkSpeed = hum.WalkSpeed
+        token.oldJumpPower = hum.JumpPower
+        token.oldJumpHeight = hum.JumpHeight
+        token.oldUseJumpPower = hum.UseJumpPower
+        token.directAnimation = true
+
+        local anim = Instance.new("Animation")
+        anim.AnimationId = "http://www.roblox.com/asset/?version=1&id=" .. tostring(e.AnimationId)
+        local track
+        local ok = pcall(function()
+            track = hum:LoadAnimation(anim)
+        end)
+        anim:Destroy()
+        if not ok or not track then
+            CancelActiveEmote()
+            return
+        end
+
+        token.directTrack = track
+        table.insert(token.tracks, track)
+        track.Priority = Enum.AnimationPriority.Action
+        track.Looped = true
+
+        if e.MoveLock then
+            hum.WalkSpeed = 0
+            hum.JumpPower = 0
+            hum.JumpHeight = 0
+            hum.AutoRotate = false
+            hum:Move(Vector3.zero, true)
+        end
+
+        track:Play(0.12, 1, e.AnimationSpeed or 1)
+        return
+    end
+
     local early = e.MusicEarly or 0
     PlaySound(e)
     task.spawn(function()
@@ -446,6 +527,22 @@ local function ExecEmote(e)
 end
 local function RunRig(clone, e)
     task.spawn(function()
+        if e.DirectAnimation then
+            local hum = clone:FindFirstChildOfClass("Humanoid")
+            if not hum then return end
+            local anim = Instance.new("Animation")
+            anim.AnimationId = "http://www.roblox.com/asset/?version=1&id=" .. tostring(e.AnimationId)
+            local track
+            local ok = pcall(function()
+                track = hum:LoadAnimation(anim)
+            end)
+            anim:Destroy()
+            if not ok or not track then return end
+            track.Priority = Enum.AnimationPriority.Action
+            track.Looped = true
+            track:Play(0.12, 1, e.AnimationSpeed or 1)
+            return
+        end
         while not ScriptCache[e.Name] do task.wait(0.05) end
         local fn = loadstring(ScriptCache[e.Name])
         if fn then
@@ -1365,6 +1462,10 @@ task.spawn(function()
 end)
 local function DoEmoteReset()
     if not IsEmoting then return end
+    if ActiveToken and ActiveToken.directAnimation then
+        CancelActiveEmote()
+        return
+    end
     local savedCF = EmoteOrigin
     CancelActiveEmote()
     local char = LocalPlayer.Character
