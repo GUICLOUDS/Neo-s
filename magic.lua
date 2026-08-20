@@ -4,6 +4,7 @@ local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 
 local LocalPlayer = Players.LocalPlayer
+local activePush = nil
 
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "PlayermoveGUI"
@@ -17,6 +18,22 @@ if not success then
 end
 
 LocalPlayer.CharacterAdded:Connect(function()
+	if activePush then
+		activePush.finished = true
+		if activePush.physicsConnection then
+			activePush.physicsConnection:Disconnect()
+			activePush.physicsConnection = nil
+		end
+		if activePush.clone and activePush.clone.Parent then
+			activePush.clone:Destroy()
+		end
+		activePush = nil
+		local camera = Workspace.CurrentCamera
+		if camera then
+			camera.CameraType = Enum.CameraType.Custom
+			camera.CameraSubject = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+		end
+	end
 	ScreenGui:Destroy()
 end)
 
@@ -312,6 +329,23 @@ UserInputService.InputChanged:Connect(function(input)
 end)
 
 CloseButton.MouseButton1Click:Connect(function()
+	if activePush then
+		activePush.finished = true
+		if activePush.physicsConnection then
+			activePush.physicsConnection:Disconnect()
+			activePush.physicsConnection = nil
+		end
+		if activePush.clone and activePush.clone.Parent then
+			activePush.clone:Destroy()
+		end
+		if activePush.root and activePush.root.Parent then
+			activePush.root.AssemblyLinearVelocity = Vector3.zero
+			activePush.root.AssemblyAngularVelocity = Vector3.zero
+			pcall(function() sethiddenproperty(activePush.root, "PhysicsRepRootPart", activePush.root) end)
+			activePush.root.CFrame = activePush.originalCFrame
+		end
+		activePush = nil
+	end
 	ScreenGui:Destroy()
 end)
 
@@ -444,34 +478,194 @@ local function getDirectionVector(dirName, targetHrp, originCFrame)
 	return Vector3.new(0, 0, 0)
 end
 
+local function setArchivableRecursive(instance)
+	local original = {}
+	for _, obj in ipairs(instance:GetDescendants()) do
+		original[obj] = obj.Archivable
+		obj.Archivable = true
+	end
+	return original
+end
+
+local function restoreArchivable(original)
+	for obj, value in pairs(original) do
+		if obj and obj.Parent then
+			obj.Archivable = value
+		end
+	end
+end
+
+local function createTransparentClone(character, cloneCFrame)
+	local oldCharacterArchivable = character.Archivable
+	local originalArchivable = setArchivableRecursive(character)
+	character.Archivable = true
+
+	local clone
+	local ok = pcall(function()
+		clone = character:Clone()
+	end)
+
+	restoreArchivable(originalArchivable)
+	character.Archivable = oldCharacterArchivable
+
+	if not ok or not clone then
+		return nil
+	end
+
+	clone.Name = LocalPlayer.Name .. "_TeleportClone"
+	clone.Parent = Workspace
+
+	pcall(function()
+		clone:PivotTo(cloneCFrame)
+	end)
+
+	for _, obj in ipairs(clone:GetDescendants()) do
+		if obj:IsA("Script") or obj:IsA("LocalScript") or obj:IsA("ModuleScript") then
+			obj:Destroy()
+		elseif obj:IsA("BasePart") then
+			obj.Anchored = true
+			obj.CanCollide = false
+			obj.CanTouch = false
+			obj.CanQuery = false
+			obj.Massless = true
+			obj.CastShadow = false
+			obj.Transparency = math.max(obj.Transparency, 0.55)
+		elseif obj:IsA("Decal") or obj:IsA("Texture") then
+			obj.Transparency = math.max(obj.Transparency, 0.55)
+		elseif obj:IsA("ParticleEmitter") or obj:IsA("Trail") or obj:IsA("Beam") then
+			obj.Enabled = false
+		elseif obj:IsA("Humanoid") then
+			obj.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+			obj.BreakJointsOnDeath = false
+			obj.AutoRotate = false
+		end
+	end
+
+	return clone
+end
+
+local function stopRootMomentum(root)
+	if not root or not root.Parent then return end
+	root.AssemblyLinearVelocity = Vector3.zero
+	root.AssemblyAngularVelocity = Vector3.zero
+	root.Anchored = true
+	pcall(function() sethiddenproperty(root, "PhysicsRepRootPart", root) end)
+end
+
+local function cleanupActivePush()
+	local state = activePush
+	if not state then return end
+	activePush = nil
+	state.finished = true
+	if state.physicsConnection then state.physicsConnection:Disconnect(); state.physicsConnection=nil end
+	local root = state.root
+	if root and root.Parent then
+		stopRootMomentum(root)
+		root.CFrame = state.originalCFrame
+		RunService.Heartbeat:Wait()
+		if root and root.Parent then
+			root.CFrame = state.originalCFrame
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+			pcall(function() sethiddenproperty(root, "PhysicsRepRootPart", root) end)
+			RunService.Heartbeat:Wait()
+			root.CFrame = state.originalCFrame
+			root.AssemblyLinearVelocity = Vector3.zero
+			root.AssemblyAngularVelocity = Vector3.zero
+			root.Anchored = false
+			task.defer(function() if root and root.Parent then root.AssemblyLinearVelocity=Vector3.zero; root.AssemblyAngularVelocity=Vector3.zero end end)
+		end
+	end
+	if state.clone and state.clone.Parent then state.clone:Destroy() end
+	local camera=Workspace.CurrentCamera
+	if camera then camera.CameraType=state.originalCameraType; camera.CameraSubject=state.originalCameraSubject; camera.CFrame=state.originalCameraCFrame end
+end
+
 local function executePush(dirName)
-	if not targetPlayer or not targetPlayer.Character then return end
+	cleanupActivePush()
+
+	if not targetPlayer or not targetPlayer.Character then
+		return
+	end
 
 	local myChar = LocalPlayer.Character
 	local myRoot = myChar and myChar:FindFirstChild("HumanoidRootPart")
 	local targetChar = targetPlayer.Character
-	local targetHrp = targetChar:FindFirstChild("HumanoidRootPart")
+	local targetHrp = targetChar and targetChar:FindFirstChild("HumanoidRootPart")
+	local camera = Workspace.CurrentCamera
 
-	if not myRoot or not targetHrp then return end
+	if not myRoot or not targetHrp or not camera then
+		return
+	end
 
-	local originalCFrame = myRoot.CFrame
+	local state = {
+		root = myRoot,
+		originalCFrame = myRoot.CFrame,
+		originalCameraCFrame = camera.CFrame,
+		originalCameraType = camera.CameraType,
+		originalCameraSubject = camera.CameraSubject,
+		clone = nil,
+		physicsConnection = nil,
+		finished = false
+	}
+
+	activePush = state
+
+	state.clone = createTransparentClone(myChar, state.originalCFrame)
+
+	camera.CameraType = Enum.CameraType.Scriptable
+	camera.CFrame = state.originalCameraCFrame
+
 	local power = tonumber(VelocityInput.Text) or 0
-	local direction = getDirectionVector(dirName, targetHrp, originalCFrame)
+	local direction = getDirectionVector(dirName, targetHrp, state.originalCFrame)
 	local pushVector = direction * power
-
 	local contactOffset = -direction * 1.2
-
 	local startTime = os.clock()
-	local physicsConnection
 
-	physicsConnection = RunService.Heartbeat:Connect(function()
-		if os.clock() - startTime > 0.15 then
-			physicsConnection:Disconnect()
-			physicsConnection = nil
+	local function finish()
+		if activePush ~= state or state.finished then return end
+		state.finished = true
+		if state.physicsConnection then state.physicsConnection:Disconnect(); state.physicsConnection=nil end
+		activePush=nil
+		if myRoot and myRoot.Parent then
+			stopRootMomentum(myRoot)
+			myRoot.CFrame=state.originalCFrame
+			RunService.Heartbeat:Wait()
+			if myRoot and myRoot.Parent then
+				myRoot.CFrame=state.originalCFrame
+				myRoot.AssemblyLinearVelocity=Vector3.zero
+				myRoot.AssemblyAngularVelocity=Vector3.zero
+				pcall(function() sethiddenproperty(myRoot, "PhysicsRepRootPart", myRoot) end)
+				RunService.Heartbeat:Wait()
+				myRoot.CFrame=state.originalCFrame
+				myRoot.AssemblyLinearVelocity=Vector3.zero
+				myRoot.AssemblyAngularVelocity=Vector3.zero
+				myRoot.Anchored=false
+				task.defer(function() if myRoot and myRoot.Parent then myRoot.AssemblyLinearVelocity=Vector3.zero; myRoot.AssemblyAngularVelocity=Vector3.zero end end)
+			end
+		end
+		if state.clone and state.clone.Parent then state.clone:Destroy(); state.clone=nil end
+		local currentCamera=Workspace.CurrentCamera
+		if currentCamera then currentCamera.CameraType=state.originalCameraType; currentCamera.CameraSubject=state.originalCameraSubject; currentCamera.CFrame=state.originalCameraCFrame end
+	end
+
+	state.physicsConnection = RunService.Heartbeat:Connect(function()
+		if activePush ~= state or state.finished then
 			return
 		end
 
-		if not targetHrp or not myRoot then return end
+		if os.clock() - startTime >= 0.15 then
+			finish()
+			return
+		end
+
+		if not myRoot.Parent or not targetHrp.Parent then
+			finish()
+			return
+		end
+
+		camera.CameraType = Enum.CameraType.Scriptable
+		camera.CFrame = state.originalCameraCFrame
 
 		pcall(function()
 			sethiddenproperty(myRoot, "PhysicsRepRootPart", targetHrp)
@@ -481,12 +675,6 @@ local function executePush(dirName)
 		myRoot.AssemblyLinearVelocity = pushVector
 		myRoot.AssemblyAngularVelocity = Vector3.new(0, power * 3.5, 0)
 	end)
-
-	repeat task.wait() until not physicsConnection
-
-	myRoot.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
-	myRoot.AssemblyAngularVelocity = Vector3.new(0, 0, 0)
-	myRoot.CFrame = originalCFrame
 end
 
 for dir, btn in pairs(dirButtons) do
