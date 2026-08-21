@@ -680,6 +680,7 @@ ScreenGui.Name           = "EmoteWheelV5"
 ScreenGui.ResetOnSpawn   = false
 ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 ScreenGui.IgnoreGuiInset = true
+ScreenGui.DisplayOrder = 1000
 ScreenGui.Parent         = CoreGui
 local Overlay = Instance.new("Frame")
 Overlay.Size             = UDim2.new(1,0, 1,0)
@@ -1460,7 +1461,66 @@ task.spawn(function()
         task.wait(1.4)
     end
 end)
-local function DoEmoteReset()
+local DoEmoteReset
+local MobileStopButton = Instance.new("TextButton")
+MobileStopButton.Name = "MobileStopEmote"
+MobileStopButton.Size = UDim2.new(0, 132, 0, 48)
+MobileStopButton.Position = UDim2.new(1, -150, 1, -150)
+MobileStopButton.AnchorPoint = Vector2.new(0, 0)
+MobileStopButton.BackgroundColor3 = Color3.fromRGB(18,18,18)
+MobileStopButton.BackgroundTransparency = 0.12
+MobileStopButton.BorderSizePixel = 0
+MobileStopButton.Text = "STOP EMOTE"
+MobileStopButton.Font = Enum.Font.GothamBold
+MobileStopButton.TextSize = 13
+MobileStopButton.TextColor3 = Color3.fromRGB(255,255,255)
+MobileStopButton.AutoButtonColor = false
+MobileStopButton.Active = true
+MobileStopButton.Selectable = false
+MobileStopButton.Visible = UserInputService.TouchEnabled
+MobileStopButton.ZIndex = 100
+MobileStopButton.Parent = ScreenGui
+local MobileStopCorner = Instance.new("UICorner")
+MobileStopCorner.CornerRadius = UDim.new(0, 14)
+MobileStopCorner.Parent = MobileStopButton
+local MobileStopStroke = Instance.new("UIStroke")
+MobileStopStroke.Color = Color3.fromRGB(255,100,100)
+MobileStopStroke.Thickness = 1.5
+MobileStopStroke.Transparency = 0.25
+MobileStopStroke.Parent = MobileStopButton
+MobileStopButton.MouseButton1Down:Connect(function()
+    Tween(MobileStopButton, {BackgroundColor3 = Color3.fromRGB(55,20,20)}, 0.08)
+end)
+MobileStopButton.MouseButton1Up:Connect(function()
+    Tween(MobileStopButton, {BackgroundColor3 = Color3.fromRGB(18,18,18)}, 0.12)
+end)
+MobileStopButton.Activated:Connect(function()
+    if IsEmoting then
+        DoEmoteReset()
+    end
+end)
+local MobileStopLastState = false
+local MobileStopConnection
+MobileStopConnection = RunService.Heartbeat:Connect(function()
+    if not MobileStopButton.Parent then
+        if MobileStopConnection then MobileStopConnection:Disconnect() end
+        return
+    end
+    local shouldShow = UserInputService.TouchEnabled and IsEmoting
+    if shouldShow ~= MobileStopLastState then
+        MobileStopLastState = shouldShow
+        MobileStopButton.Visible = shouldShow
+        if shouldShow then
+            MobileStopButton.Position = UDim2.new(1, -150, 1, -150)
+            MobileStopButton.BackgroundTransparency = 1
+            Tween(MobileStopButton, {BackgroundTransparency = 0.12}, 0.16)
+        else
+            MobileStopButton.BackgroundTransparency = 0.12
+        end
+    end
+end)
+
+DoEmoteReset = function()
     if not IsEmoting then return end
     if ActiveToken and ActiveToken.directAnimation then
         CancelActiveEmote()
