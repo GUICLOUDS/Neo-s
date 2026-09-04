@@ -1,0 +1,2166 @@
+----++++====[[SKILLSSSS ANDDDD GUIIIIS]]====++++------
+
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+X_COOLDOWN = 5
+B_COOLDOWN = 5
+N_COOLDOWN = 5
+X_BUSY_TIME = 1.8
+B_BUSY_TIME = 1.8
+N_BUSY_TIME = 1.8
+DEFAULT_SPEED = 24
+BOOST_SPEED = 40
+BUTTON_DIAMETER = 64
+BUTTON_GAP = 10
+STROKE_THICKNESS = 2
+STROKE_COLOR = Color3.fromRGB(255, 255, 255)
+STROKE_TRANSPARENCY = 0.35
+BOOST_ACTIVE_STROKE = Color3.fromRGB(255, 205, 60)
+OVERLAY_COLOR = Color3.fromRGB(8, 8, 8)
+OVERLAY_TRANSPARENCY = 0.4
+
+local existingGui = playerGui:FindFirstChild("MoveGUI")
+if existingGui then
+existingGui:Destroy()
+end
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "MoveGUI"
+gui.ResetOnSpawn = true
+gui.Parent = playerGui
+
+local hasDied = false
+
+local container = Instance.new("Frame")
+container.Name = "MoveContainer"
+container.AnchorPoint = Vector2.new(1, 0.5)
+container.Position = UDim2.new(1, -40, 0.5, 0)
+container.Size = UDim2.new(0, BUTTON_DIAMETER, 0, 400)
+container.BackgroundTransparency = 1
+container.Parent = gui
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.FillDirection = Enum.FillDirection.Vertical
+listLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Padding = UDim.new(0, BUTTON_GAP)
+listLayout.Parent = container
+
+local function BaseButton(name, order)
+local button = Instance.new("TextButton")
+button.Name = name .. "Move"
+button.Size = UDim2.fromOffset(BUTTON_DIAMETER, BUTTON_DIAMETER)
+button.Text = name
+button.TextColor3 = Color3.new(1, 1, 1)
+button.TextScaled = true
+button.Font = Enum.Font.GothamBold
+button.BorderSizePixel = 0
+button.AutoButtonColor = false
+button.LayoutOrder = order
+button.Parent = container
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(1, 0)
+corner.Parent = button
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = STROKE_COLOR
+stroke.Transparency = STROKE_TRANSPARENCY
+stroke.Thickness = STROKE_THICKNESS
+stroke.Parent = button
+
+return button, stroke
+end
+
+local function ApplyGradient(button, colorA, colorB)
+local gradient = Instance.new("UIGradient")
+gradient.Color = ColorSequence.new(colorA, colorB)
+gradient.Rotation = 90
+gradient.Parent = button
+end
+
+local function CreateCooldownOverlay(button)
+local overlay = Instance.new("Frame")
+overlay.Name = "Overlay"
+overlay.Size = UDim2.fromScale(1, 1)
+overlay.BackgroundTransparency = 1
+overlay.ClipsDescendants = true
+overlay.Visible = false
+overlay.ZIndex = 5
+overlay.Parent = button
+
+local fill = Instance.new("Frame")
+fill.Name = "Fill"
+fill.AnchorPoint = Vector2.new(0, 1)
+fill.Position = UDim2.fromScale(0, 1)
+fill.Size = UDim2.fromScale(1, 1)
+fill.BackgroundColor3 = OVERLAY_COLOR
+fill.BackgroundTransparency = OVERLAY_TRANSPARENCY
+fill.BorderSizePixel = 0
+fill.ZIndex = 5
+fill.Parent = overlay
+
+local countdown = Instance.new("TextLabel")
+countdown.Name = "Countdown"
+countdown.Size = UDim2.fromScale(1, 1)
+countdown.BackgroundTransparency = 1
+countdown.TextColor3 = Color3.new(1, 1, 1)
+countdown.Font = Enum.Font.GothamBold
+countdown.TextScaled = true
+countdown.Visible = false
+countdown.ZIndex = 6
+countdown.Parent = button
+
+return overlay, fill, countdown
+end
+
+local jButton, jStroke = BaseButton("J", 1)
+ApplyGradient(jButton, Color3.fromRGB(60, 170, 255), Color3.fromRGB(0, 90, 200))
+
+local xButton = BaseButton("X", 2)
+ApplyGradient(xButton, Color3.fromRGB(255, 210, 80), Color3.fromRGB(200, 140, 0))
+local xOverlay, xFill, xCountdown = CreateCooldownOverlay(xButton)
+
+local bButton = BaseButton("B", 3)
+ApplyGradient(bButton, Color3.fromRGB(70, 70, 70), Color3.fromRGB(15, 15, 15))
+local bOverlay, bFill, bCountdown = CreateCooldownOverlay(bButton)
+
+local nButton = BaseButton("N", 4)
+ApplyGradient(nButton, Color3.fromRGB(190, 90, 255), Color3.fromRGB(110, 0, 200))
+local nOverlay, nFill, nCountdown = CreateCooldownOverlay(nButton)
+
+local buttonRefs = {
+X = {overlay = xOverlay, fill = xFill, countdown = xCountdown},
+B = {overlay = bOverlay, fill = bFill, countdown = bCountdown},
+N = {overlay = nOverlay, fill = nFill, countdown = nCountdown}
+}
+
+local cooldowns = {X = false, B = false, N = false}
+local busy = false
+local jEnabled = false
+
+local function SetJ(enabled)
+local character = player.Character
+local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+
+jEnabled = enabled
+
+if humanoid then
+if jEnabled then
+humanoid.WalkSpeed = BOOST_SPEED
+jStroke.Color = BOOST_ACTIVE_STROKE
+jStroke.Thickness = STROKE_THICKNESS + 1
+else
+humanoid.WalkSpeed = DEFAULT_SPEED
+jStroke.Color = STROKE_COLOR
+jStroke.Thickness = STROKE_THICKNESS
+end
+end
+end
+
+local function StartCooldown(key, duration)
+cooldowns[key] = true
+
+local refs = buttonRefs[key]
+refs.overlay.Visible = true
+refs.fill.Size = UDim2.fromScale(1, 1)
+refs.countdown.Visible = true
+
+local tween = TweenService:Create(
+refs.fill,
+TweenInfo.new(duration, Enum.EasingStyle.Linear),
+{Size = UDim2.fromScale(1, 0)}
+)
+
+tween:Play()
+
+local startTime = os.clock()
+
+task.spawn(function()
+while cooldowns[key] do
+local remaining = duration - (os.clock() - startTime)
+
+if remaining <= 0 then
+break
+end
+
+refs.countdown.Text = tostring(math.ceil(remaining))
+task.wait(0.1)
+end
+end)
+
+task.delay(duration, function()
+if hasDied then
+return
+end
+
+cooldowns[key] = false
+refs.overlay.Visible = false
+refs.countdown.Visible = false
+end)
+end
+
+local function RunMove(key, busyTime, cooldown, moveFunction)
+if busy then
+return
+end
+
+if cooldowns[key] then
+return
+end
+
+busy = true
+
+local wasJEnabled = jEnabled
+
+SetJ(false)
+
+StartCooldown(key, cooldown)
+
+task.spawn(function()
+moveFunction()
+end)
+
+task.delay(busyTime, function()
+if hasDied then
+return
+end
+
+busy = false
+
+if wasJEnabled then
+SetJ(true)
+end
+end)
+end
+
+local function XMove()
+task.spawn(function()
+local Players=game:GetService("Players")
+local RunService=game:GetService("RunService")
+local TweenService=game:GetService("TweenService")
+local PhysicsService=game:GetService("PhysicsService")
+local player=Players.LocalPlayer
+local character=player.Character or player.CharacterAdded:Wait()
+local camera=workspace.CurrentCamera
+local root=character:FindFirstChild("HumanoidRootPart")
+if not root then return end
+
+local ChargeTime=1.3
+local ProjectileCount=11
+local ProjectileSpeed=500
+local SphereSize=30
+local SphereTime=0.25
+local RiseHeight=7
+local SpreadRadius=8
+local MinimumSpacing=4
+local RiseTime=0.55
+local FollowDelay=0.12
+local FollowSmoothness=5
+
+local CollisionGroup="PurpleProjectile"
+
+pcall(function()
+PhysicsService:RegisterCollisionGroup(CollisionGroup)
+end)
+
+pcall(function()
+PhysicsService:CollisionGroupSetCollidable(CollisionGroup,CollisionGroup,false)
+end)
+
+local aiming=true
+local aimConnection
+local projectiles={}
+local offsets={}
+
+local function getPosition(index)
+local offset=offsets[index]
+local target=root.Position+Vector3.new(
+offset.X,
+offset.Y,
+offset.Z
+)
+return target
+end
+
+for i=1,ProjectileCount do
+local position
+local valid=false
+
+for attempt=1,100 do
+local angle=math.random()*math.pi*2
+local radius=math.random(5,SpreadRadius)
+local height=math.random(4,RiseHeight+3)
+
+position=Vector3.new(
+math.cos(angle)*radius,
+height,
+math.sin(angle)*radius
+)
+
+valid=true
+
+for _,other in ipairs(offsets) do
+local flatDistance=Vector3.new(
+position.X-other.X,
+0,
+position.Z-other.Z
+).Magnitude
+
+if flatDistance<MinimumSpacing then
+valid=false
+break
+end
+end
+
+if valid then
+break
+end
+end
+
+table.insert(offsets,position)
+end
+
+aimConnection=RunService.RenderStepped:Connect(function(deltaTime)
+if not aiming or not root.Parent then
+if aimConnection then
+aimConnection:Disconnect()
+end
+return
+end
+
+local direction=camera.CFrame.LookVector
+local flatDirection=Vector3.new(direction.X,0,direction.Z)
+
+if flatDirection.Magnitude>0 then
+root.CFrame=CFrame.lookAt(root.Position,root.Position+flatDirection)
+end
+
+for i,projectile in ipairs(projectiles) do
+if projectile and projectile.Parent and projectile:GetAttribute("Following") then
+local target=getPosition(i)
+local alpha=1-math.exp(-FollowSmoothness*deltaTime)
+projectile.CFrame=projectile.CFrame:Lerp(CFrame.new(target),alpha)
+end
+end
+end)
+
+for i=1,ProjectileCount do
+local target=getPosition(i)
+
+local groundPosition=Vector3.new(
+target.X,
+root.Position.Y-3,
+target.Z
+)
+
+local box=Instance.new("Part")
+box.Name="PurpleBox"
+box.Size=Vector3.new(2,2,2)
+box.Color=Color3.fromRGB(170,0,255)
+box.Material=Enum.Material.Neon
+box.Anchored=true
+box.CanCollide=false
+box.CanTouch=true
+box.CanQuery=false
+box.CFrame=CFrame.new(groundPosition)
+box.CollisionGroup=CollisionGroup
+box:SetAttribute("Following",false)
+box.Parent=workspace
+
+local mesh=Instance.new("SpecialMesh")
+mesh.MeshType=Enum.MeshType.Brick
+mesh.Scale=Vector3.new(1,1,1)
+mesh.Parent=box
+
+table.insert(projectiles,box)
+
+local riseTarget=getPosition(i)
+
+local riseTween=TweenService:Create(
+box,
+TweenInfo.new(
+RiseTime+math.random()*0.15,
+Enum.EasingStyle.Back,
+Enum.EasingDirection.Out
+),
+{CFrame=CFrame.new(riseTarget)}
+)
+
+riseTween:Play()
+
+riseTween.Completed:Connect(function()
+if box and box.Parent and aiming then
+box:SetAttribute("Following",true)
+end
+end)
+
+task.wait(0.04)
+end
+
+task.wait(math.max(0,ChargeTime-RiseTime))
+
+aiming=false
+
+if aimConnection then
+aimConnection:Disconnect()
+end
+
+local launchDirection=camera.CFrame.LookVector
+
+for _,box in ipairs(projectiles) do
+if box and box.Parent then
+box:SetAttribute("Following",false)
+box.Anchored=false
+box.CanTouch=true
+box.AssemblyLinearVelocity=launchDirection*ProjectileSpeed
+
+local touched=false
+
+box.Touched:Connect(function(hit)
+if touched then return end
+if not hit or hit:IsDescendantOf(character) then return end
+if hit.CollisionGroup==CollisionGroup then return end
+
+touched=true
+
+local position=box.Position
+box.CanTouch=false
+box:Destroy()
+
+local sphere=Instance.new("Part")
+sphere.Name="PurpleSphere"
+sphere.Size=Vector3.new(2,2,2)
+sphere.Color=Color3.fromRGB(170,0,255)
+sphere.Material=Enum.Material.Neon
+sphere.Anchored=true
+sphere.CanCollide=false
+sphere.CanTouch=false
+sphere.CanQuery=false
+sphere.Position=position
+sphere.Parent=workspace
+
+local sphereMesh=Instance.new("SpecialMesh")
+sphereMesh.MeshType=Enum.MeshType.Sphere
+sphereMesh.Scale=Vector3.new(1,1,1)
+sphereMesh.Parent=sphere
+
+local tween=TweenService:Create(
+sphere,
+TweenInfo.new(
+SphereTime,
+Enum.EasingStyle.Quad,
+Enum.EasingDirection.Out
+),
+{Size=Vector3.new(SphereSize,SphereSize,SphereSize)}
+)
+
+tween:Play()
+
+tween.Completed:Connect(function()
+sphere:Destroy()
+end)
+end)
+
+task.delay(5,function()
+if box and box.Parent then
+box:Destroy()
+end
+end)
+end
+
+task.wait(0.05)
+end
+
+table.clear(projectiles)
+table.clear(offsets)
+end)
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layer)
+    layer = math.clamp(layer, 1, #PriorityLayers)
+    track.Priority = PriorityLayers[layer]
+end
+
+local layer = 5
+
+local animation = Instance.new("Animation")
+animation.AnimationId = "http://www.roblox.com/asset/?version=1&id=181262679"
+local animationTrack = humanoid:LoadAnimation(animation)
+SetLayer(animationTrack, layer)
+local fadeTime = 0.5
+animationTrack:Play(fadeTime)
+animationTrack.TimePosition = 0
+animationTrack:AdjustSpeed(0.6)
+task.delay(2, function()
+    animationTrack:Stop(fadeTime)
+end)
+end
+
+local function BMove()
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local torso = character:WaitForChild("HumanoidRootPart")
+
+local PriorityLayers = {
+	Enum.AnimationPriority.Core,
+	Enum.AnimationPriority.Idle,
+	Enum.AnimationPriority.Movement,
+	Enum.AnimationPriority.Action,
+	Enum.AnimationPriority.Action2,
+	Enum.AnimationPriority.Action3,
+	Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layer)
+	layer = math.clamp(layer, 1, #PriorityLayers)
+	track.Priority = PriorityLayers[layer]
+end
+
+task.spawn(function()
+	local layer = 4
+	local fadeTime = 0
+	local speed = 5
+	local loops = 10
+
+	local animation1 = Instance.new("Animation")
+	animation1.AnimationId = "http://www.roblox.com/asset/?version=1&id=204062532"
+
+	local animation2 = Instance.new("Animation")
+	animation2.AnimationId = "http://www.roblox.com/asset/?version=1&id=126753849"
+
+	local track1 = humanoid:LoadAnimation(animation1)
+	local track2 = humanoid:LoadAnimation(animation2)
+
+	SetLayer(track1, layer)
+	SetLayer(track2, layer)
+
+	track1.Looped = true
+	track2.Looped = true
+
+	track1:Play(fadeTime)
+	track2:Play(fadeTime)
+
+	track1.TimePosition = 0
+	track2.TimePosition = 0
+
+	track1:AdjustSpeed(speed)
+	track2:AdjustSpeed(speed)
+
+	local completedLoops = 0
+	local lastTime = track1.TimePosition
+
+	while completedLoops < loops do
+		local currentTime = track1.TimePosition
+
+		if currentTime < lastTime then
+			completedLoops += 1
+		end
+
+		lastTime = currentTime
+		task.wait()
+	end
+
+	track1:Stop(fadeTime)
+	track2:Stop(fadeTime)
+
+	animation1:Destroy()
+	animation2:Destroy()
+end)
+
+task.spawn(function()
+	local BOX_COUNT = 15
+	local SPAWN_INTERVAL = 0.09
+	local TRAVEL_DISTANCE = 20
+	local TRAVEL_TIME = 0.3
+
+	for i = 1, BOX_COUNT do
+		task.spawn(function()
+			local lookDirection = torso.CFrame.LookVector
+			local rightDirection = torso.CFrame.RightVector
+			local upDirection = Vector3.new(0, 1, 0)
+
+			local forwardDistance = math.random(5, 15) / 10
+			local randomSide = math.random(-20, 20) / 15
+			local randomHeight = math.random(-20, 20) / 10
+
+			local spawnPosition =
+				torso.Position
+				+ lookDirection * forwardDistance
+				+ rightDirection * randomSide
+				+ upDirection * randomHeight
+
+			local box = Instance.new("Part")
+			box.Name = "PurplePunch"
+			box.Size = Vector3.new(1.5, 1.5, 3)
+			box.CFrame = CFrame.lookAt(
+				spawnPosition,
+				spawnPosition + lookDirection
+			)
+			box.Color = Color3.fromRGB(170, 0, 255)
+			box.Material = Enum.Material.Neon
+			box.Anchored = true
+			box.CanCollide = false
+			box.CanTouch = false
+			box.CanQuery = false
+			box.Transparency = 0
+			box.Parent = workspace
+
+			local light = Instance.new("PointLight")
+			light.Color = Color3.fromRGB(170, 0, 255)
+			light.Brightness = 5
+			light.Range = 10
+			light.Parent = box
+
+			local rayParams = RaycastParams.new()
+			rayParams.FilterType = Enum.RaycastFilterType.Exclude
+			rayParams.FilterDescendantsInstances = {character, box}
+
+			local startPosition = spawnPosition
+			local targetPosition = spawnPosition + lookDirection * TRAVEL_DISTANCE
+			local hitPosition = nil
+
+			local startTime = os.clock()
+
+			while os.clock() - startTime < TRAVEL_TIME do
+				if not box.Parent then
+					return
+				end
+
+				local elapsed = math.clamp((os.clock() - startTime) / TRAVEL_TIME, 0, 1)
+				local currentPosition = startPosition:Lerp(targetPosition, elapsed)
+				local previousPosition = startPosition:Lerp(
+					targetPosition,
+					math.clamp((elapsed - 0.05), 0, 1)
+				)
+
+				local direction = currentPosition - previousPosition
+
+				if direction.Magnitude > 0 then
+					local result = workspace:Raycast(
+						previousPosition,
+						direction,
+						rayParams
+					)
+
+					if result then
+						hitPosition = result.Position
+						break
+					end
+				end
+
+				box.CFrame = CFrame.lookAt(
+					currentPosition,
+					currentPosition + lookDirection
+				)
+
+				box.Transparency = elapsed
+				task.wait()
+			end
+
+			if hitPosition then
+				box:Destroy()
+
+				local sphere = Instance.new("Part")
+				sphere.Name = "PurpleExplosion"
+				sphere.Shape = Enum.PartType.Ball
+				sphere.Size = Vector3.new(5, 5, 5)
+				sphere.Position = hitPosition
+				sphere.Color = Color3.fromRGB(170, 0, 255)
+				sphere.Material = Enum.Material.Neon
+				sphere.Anchored = true
+				sphere.CanCollide = false
+				sphere.CanTouch = false
+				sphere.CanQuery = false
+				sphere.Transparency = 0
+				sphere.Parent = workspace
+
+				local explosionLight = Instance.new("PointLight")
+				explosionLight.Color = Color3.fromRGB(170, 0, 255)
+				explosionLight.Brightness = 8
+				explosionLight.Range = 15
+				explosionLight.Parent = sphere
+
+				local sphereTween = TweenService:Create(
+					sphere,
+					TweenInfo.new(
+						0.25,
+						Enum.EasingStyle.Quad,
+						Enum.EasingDirection.Out
+					),
+					{
+						Size = Vector3.new(7, 7, 7),
+						Transparency = 1
+					}
+				)
+
+				sphereTween:Play()
+				sphereTween.Completed:Wait()
+
+				sphere:Destroy()
+			else
+				box:Destroy()
+			end
+		end)
+
+		if i < BOX_COUNT then
+			task.wait(SPAWN_INTERVAL)
+		end
+	end
+end)
+end
+
+local function NMove()
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layer)
+    layer = math.clamp(layer, 1, #PriorityLayers)
+    track.Priority = PriorityLayers[layer]
+end
+
+local layer = 4
+
+local animation = Instance.new("Animation")
+animation.AnimationId = "http://www.roblox.com/asset/?version=1&id=233329237"
+
+local animationTrack = humanoid:LoadAnimation(animation)
+
+SetLayer(animationTrack, layer)
+
+local fadeTime = 0.2
+animationTrack:Play(fadeTime)
+animationTrack.TimePosition = 0
+animationTrack:AdjustSpeed(0.5)
+
+task.delay(3, function()
+    animationTrack:Stop(fadeTime)
+end)
+wait(0.5)
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+
+task.spawn(function()
+	local player = Players.LocalPlayer
+	local character = player.Character or player.CharacterAdded:Wait()
+	local root = character:WaitForChild("HumanoidRootPart")
+
+	local spikeCount = 12
+	local spacing = 20
+	local riseHeight = 25
+
+	for i = 1, spikeCount do
+		local distance = i * spacing
+
+		local spike = Instance.new("Part")
+		spike.Name = "PurpleSpike"
+		spike.Shape = Enum.PartType.Ball
+		spike.Size = Vector3.new(2, 50, 10)
+		spike.Anchored = true
+		spike.CanCollide = false
+		spike.CanTouch = false
+		spike.CanQuery = false
+		spike.Material = Enum.Material.Neon
+		spike.Color = Color3.fromRGB(170, 0, 255)
+
+		local mesh = Instance.new("SpecialMesh")
+		mesh.MeshType = Enum.MeshType.Sphere
+		mesh.Parent = spike
+
+		local light = Instance.new("PointLight")
+		light.Color = Color3.fromRGB(170, 0, 255)
+		light.Brightness = 3
+		light.Range = 30
+		light.Parent = spike
+
+		local position = root.Position + root.CFrame.LookVector * distance
+		local startPosition = position - Vector3.new(0, 15, 0)
+		local risePosition = position + Vector3.new(0, riseHeight - 15, 0)
+
+		local function facePlayer(position)
+			local target = Vector3.new(
+				root.Position.X,
+				position.Y,
+				root.Position.Z
+			)
+
+			return CFrame.lookAt(position, target)
+		end
+
+		spike.CFrame = facePlayer(startPosition)
+		spike.Parent = workspace
+
+		task.spawn(function()
+			local rise = TweenService:Create(
+				spike,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
+				{CFrame = facePlayer(risePosition)}
+			)
+
+			local drop = TweenService:Create(
+				spike,
+				TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{CFrame = facePlayer(startPosition)}
+			)
+
+			local fade = TweenService:Create(
+				spike,
+				TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
+				{
+					Transparency = 1,
+					Size = Vector3.new(0.5, 5, 2.5)
+				}
+			)
+
+			rise:Play()
+			rise.Completed:Wait()
+
+			drop:Play()
+			drop.Completed:Wait()
+
+			fade:Play()
+			fade.Completed:Wait()
+
+			spike:Destroy()
+		end)
+
+		task.wait(0.04)
+	end
+end)
+end
+
+local function ActivateButton(button)
+if hasDied then
+return
+end
+
+if button == jButton then
+if busy then
+return
+end
+
+SetJ(not jEnabled)
+
+elseif button == xButton then
+RunMove("X", X_BUSY_TIME, X_COOLDOWN, XMove)
+
+elseif button == bButton then
+RunMove("B", B_BUSY_TIME, B_COOLDOWN, BMove)
+
+elseif button == nButton then
+RunMove("N", N_BUSY_TIME, N_COOLDOWN, NMove)
+end
+end
+
+jButton.Activated:Connect(function()
+ActivateButton(jButton)
+end)
+
+xButton.Activated:Connect(function()
+ActivateButton(xButton)
+end)
+
+bButton.Activated:Connect(function()
+ActivateButton(bButton)
+end)
+
+nButton.Activated:Connect(function()
+ActivateButton(nButton)
+end)
+
+local keybinds = {
+[Enum.KeyCode.J] = jButton,
+[Enum.KeyCode.X] = xButton,
+[Enum.KeyCode.B] = bButton,
+[Enum.KeyCode.N] = nButton
+}
+
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+if gameProcessed then
+return
+end
+
+if hasDied then
+return
+end
+
+if UserInputService:GetFocusedTextBox() then
+return
+end
+
+local button = keybinds[input.KeyCode]
+
+if button then
+ActivateButton(button)
+end
+end)
+
+local diedConnection
+
+local function OnCharacterAdded(character)
+if hasDied then
+return
+end
+
+local humanoid = character:WaitForChild("Humanoid")
+
+jEnabled = false
+humanoid.WalkSpeed = DEFAULT_SPEED
+jStroke.Color = STROKE_COLOR
+jStroke.Thickness = STROKE_THICKNESS
+
+if diedConnection then
+diedConnection:Disconnect()
+end
+
+diedConnection = humanoid.Died:Connect(function()
+if hasDied then
+return
+end
+
+hasDied = true
+busy = false
+jEnabled = false
+
+if gui then
+gui.Enabled = false
+gui:Destroy()
+end
+end)
+end
+
+if player.Character then
+OnCharacterAdded(player.Character)
+end
+
+player.CharacterAdded:Connect(OnCharacterAdded)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+Wait(0.1)
+--=======+ [[ tilt and hip height pendulium ]] +========--
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
+local TweenService = game:GetService("TweenService")
+local Workspace = game:GetService("Workspace")
+local player = Players.LocalPlayer
+local c = player.Character or player.CharacterAdded:Wait()
+local humanoid = c:WaitForChild("Humanoid")
+c.Archivable = true
+local originalWalkSpeed = humanoid.WalkSpeed
+local originalJumpPower = humanoid.JumpPower
+local originalUseJumpPower = humanoid.UseJumpPower
+humanoid.WalkSpeed = 0
+humanoid.JumpPower = 0
+local PLAYER_GROUP = "RealPlayerGroup"
+local CLONE_GROUP = "CloneVisualGroup"
+pcall(function()
+PhysicsService:RegisterCollisionGroup(PLAYER_GROUP)
+PhysicsService:RegisterCollisionGroup(CLONE_GROUP)
+PhysicsService:CollisionGroupSetCollidable(PLAYER_GROUP, CLONE_GROUP, false)
+end)
+local hrp0 = c:WaitForChild("HumanoidRootPart")
+local hrp1 = hrp0:Clone()
+c.Parent = nil
+hrp0.Parent = hrp1
+if hrp0:FindFirstChild("RootJoint") then
+hrp0.RootJoint.Part0 = nil
+end
+hrp1.Parent = c
+c.Parent = Workspace
+local clone = c:Clone()
+c.Archivable = false
+clone.Name = player.Name .. "_Clone"
+clone.Parent = c
+local cloneRoot = clone:WaitForChild("HumanoidRootPart")
+local cloneHumanoid = clone:WaitForChild("Humanoid")
+cloneHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+cloneHumanoid.AutoRotate = false
+cloneHumanoid.PlatformStand = true
+local realTransparencyMap = {}
+local function storeAndHide(instance)
+if instance:IsA("BasePart") then
+realTransparencyMap[instance] = instance.Transparency
+instance.Transparency = 1
+pcall(function() instance.CollisionGroup = PLAYER_GROUP end)
+elseif instance:IsA("Decal") or instance:IsA("Texture") then
+realTransparencyMap[instance] = instance.Transparency
+instance.Transparency = 1
+end
+end
+for _, descendant in ipairs(c:GetDescendants()) do
+storeAndHide(descendant)
+end
+c.DescendantAdded:Connect(function(descendant)
+storeAndHide(descendant)
+end)
+local partPairs = {}
+local cloneParts = {}
+for _, object in ipairs(clone:GetDescendants()) do
+if object:IsA("Script") or object:IsA("LocalScript") then
+object:Destroy()
+elseif object:IsA("Motor6D") then
+object:Destroy()
+elseif object:IsA("BasePart") then
+object.CanCollide = false
+object.CanTouch = false
+object.CanQuery = false
+object.Massless = true
+object.Anchored = true
+pcall(function() object.CollisionGroup = CLONE_GROUP end)
+table.insert(cloneParts, object)
+if object.Name == "HumanoidRootPart" then
+object.Transparency = 1
+else
+object.Transparency = 0
+local realPart = c:FindFirstChild(object.Name, true)
+if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
+table.insert(partPairs, {real = realPart, clone = object})
+end
+end
+elseif object:IsA("Decal") or object:IsA("Texture") then
+object.Transparency = 0
+end
+end
+local camera = Workspace.CurrentCamera
+hrp0.Transparency = 1
+local stiffness = 35
+local damping = 3.5
+local maxTilt = 1.8
+local pivotOffset = Vector3.new(0, 1.5, 0)
+local yOffset = 0
+local cameraHeight = 0.6
+local idleTime = 0
+local idleWeight = 0
+local IDLE_SPEED = 2.0
+local IDLE_SWAY_X = 0.1
+local IDLE_SWAY_Y = 0.08
+local camAnchor = Instance.new("Part")
+camAnchor.Name = "CameraAnchor"
+camAnchor.Size = Vector3.new(0.1, 0.1, 0.1)
+camAnchor.Transparency = 1
+camAnchor.CanCollide = false
+camAnchor.Massless = true
+camAnchor.CFrame = hrp0.CFrame * CFrame.new(0, cameraHeight, 0)
+camAnchor.Parent = c
+local weld = Instance.new("WeldConstraint")
+weld.Part0 = hrp0
+weld.Part1 = camAnchor
+weld.Parent = camAnchor
+camera.CameraSubject = camAnchor
+local currentAngleX = 0
+local currentAngleZ = 0
+local velocityX = 0
+local velocityZ = 0
+local INITIAL_HEIGHT = 3
+local TARGET_HEIGHT = 1.8
+local TRANSITION_DURATION = 2
+humanoid.HipHeight = INITIAL_HEIGHT
+local tweenInfo = TweenInfo.new(
+TRANSITION_DURATION,
+Enum.EasingStyle.Sine,
+Enum.EasingDirection.InOut,
+-1,
+true
+)
+local hipHeightTween = TweenService:Create(humanoid, tweenInfo, {
+HipHeight = TARGET_HEIGHT
+})
+local SLIDE_INERTIA = 0.69
+local MOVE_ACCEL = 3.0
+local attachment = Instance.new("Attachment")
+attachment.Name = "SlideAttachment"
+attachment.Parent = hrp1
+local linearVelocity = Instance.new("LinearVelocity")
+linearVelocity.Name = "SlideVelocity"
+linearVelocity.Attachment0 = attachment
+linearVelocity.MaxForce = 15000
+linearVelocity.RelativeTo = Enum.ActuatorRelativeTo.World
+linearVelocity.ForceLimitMode = Enum.ForceLimitMode.Magnitude
+linearVelocity.VelocityConstraintMode = Enum.VelocityConstraintMode.Plane
+linearVelocity.PrimaryTangentAxis = Vector3.new(1, 0, 0)
+linearVelocity.SecondaryTangentAxis = Vector3.new(0, 0, 1)
+linearVelocity.PlaneVelocity = Vector2.new(0, 0)
+linearVelocity.Parent = hrp1
+local currentVelX = 0
+local currentVelZ = 0
+local isAnimating = true
+hrp1.Anchored = true
+linearVelocity.Enabled = false
+task.spawn(function()
+local startCFrame = hrp1.CFrame
+local airborneCFrame = startCFrame * CFrame.new(0, 50, 0)
+local animationDuration = 4.0
+local totalRotations = 3
+local elapsed = 0
+while elapsed < animationDuration do
+local dt = task.wait()
+elapsed = elapsed + dt
+local alpha = math.min(elapsed / animationDuration, 1)
+local currentPos = airborneCFrame.Position:Lerp(startCFrame.Position, alpha)
+local spinRotation = CFrame.Angles(0, math.rad(360 * totalRotations * alpha), 0)
+hrp1.CFrame = CFrame.new(currentPos) * (startCFrame - startCFrame.Position) * spinRotation
+end
+hrp1.CFrame = startCFrame
+hrp1.Anchored = false
+isAnimating = false
+hipHeightTween:Play()
+humanoid.WalkSpeed = originalWalkSpeed
+humanoid.JumpPower = originalJumpPower
+end)
+local function isStopped()
+return Workspace:FindFirstChild("SCRIPT_STOP", true) ~= nil
+end
+local wasStopped = false
+local function setVisibility(characterVisible)
+for inst, origTrans in pairs(realTransparencyMap) do
+if inst and inst.Parent then
+if inst == hrp0 then
+inst.Transparency = 1
+else
+inst.Transparency = characterVisible and origTrans or 1
+end
+end
+end
+for _, object in ipairs(clone:GetDescendants()) do
+if object:IsA("BasePart") and object.Name ~= "HumanoidRootPart" then
+object.Transparency = characterVisible and 1 or 0
+elseif object:IsA("Decal") or object:IsA("Texture") then
+object.Transparency = characterVisible and 1 or 0
+end
+end
+end
+RunService.Heartbeat:Connect(function(dt)
+if not c or not c.Parent or not hrp0 or not hrp1 or not clone or not clone.Parent then return end
+if isStopped() then
+if not wasStopped then
+wasStopped = true
+setVisibility(true)
+linearVelocity.Enabled = false
+currentVelX = 0
+currentVelZ = 0
+if hipHeightTween.PlaybackState == Enum.PlaybackState.Playing then
+hipHeightTween:Pause()
+end
+humanoid.HipHeight = 0
+camera.CameraSubject = humanoid
+end
+hrp0.CFrame = hrp1.CFrame
+return
+else
+if wasStopped then
+wasStopped = false
+setVisibility(false)
+camera.CameraSubject = camAnchor
+if hipHeightTween.PlaybackState == Enum.PlaybackState.Paused and not isAnimating then
+hipHeightTween:Play()
+end
+end
+end
+for _, part in ipairs(cloneParts) do
+part.CanCollide = false
+part.CanTouch = false
+part.CanQuery = false
+end
+local moveVel = hrp1.CFrame:VectorToObjectSpace(hrp1.AssemblyLinearVelocity)
+local horizontalSpeed = Vector2.new(moveVel.X, moveVel.Z).Magnitude
+local targetIdleWeight = (horizontalSpeed < 0.2) and 1 or 0
+idleWeight = idleWeight + (targetIdleWeight - idleWeight) * math.clamp(dt * 3, 0, 1)
+idleTime = idleTime + dt * IDLE_SPEED
+local infinityX = math.sin(idleTime) * IDLE_SWAY_X
+local infinityY = math.sin(idleTime * 2) * IDLE_SWAY_Y * idleWeight
+local targetAngleX = math.clamp(moveVel.Z * 0.03 + (moveVel.Y * 0.015), -maxTilt, maxTilt)
+local targetAngleZ = math.clamp(-moveVel.X * 0.03, -maxTilt, maxTilt)
+targetAngleZ = targetAngleZ + (infinityX * idleWeight)
+local characterLook = hrp1.CFrame.LookVector
+local characterRight = hrp1.CFrame.RightVector
+local upVector = Vector3.new(0, 1, 0)
+local gravityPitch = characterLook:Dot(upVector)
+local gravityRoll = characterRight:Dot(upVector)
+targetAngleX = math.clamp(targetAngleX - (gravityPitch * 1.5), -maxTilt, maxTilt)
+targetAngleZ = math.clamp(targetAngleZ + (gravityRoll * 1.5), -maxTilt, maxTilt)
+local forceX = (targetAngleX - currentAngleX) * stiffness
+velocityX = (velocityX + forceX * dt) * math.clamp(1 - (damping * dt), 0, 1)
+currentAngleX = currentAngleX + velocityX * dt
+local forceZ = (targetAngleZ - currentAngleZ) * stiffness
+velocityZ = (velocityZ + forceZ * dt) * math.clamp(1 - (damping * dt), 0, 1)
+currentAngleZ = currentAngleZ + velocityZ * dt
+local baseCFrame = hrp1.CFrame * CFrame.new(0, yOffset + infinityY, 0)
+local pivotCFrame = baseCFrame * CFrame.new(pivotOffset)
+local tiltRotation = CFrame.Angles(currentAngleX, 0, currentAngleZ)
+local calculatedCFrame = pivotCFrame * tiltRotation * CFrame.new(-pivotOffset)
+hrp0.CFrame = calculatedCFrame
+hrp0.AssemblyLinearVelocity = hrp1.AssemblyLinearVelocity
+cloneRoot.CFrame = calculatedCFrame
+local realRootCFrame = hrp1.CFrame
+for _, pair in ipairs(partPairs) do
+local offsetFromRealRoot = realRootCFrame:ToObjectSpace(pair.real.CFrame)
+pair.clone.CFrame = calculatedCFrame * offsetFromRealRoot
+end
+end)
+RunService.RenderStepped:Connect(function()
+if not humanoid or humanoid.Health <= 0 or not hrp1 or not hrp1.Parent then return end
+if isStopped() or isAnimating then
+linearVelocity.Enabled = false
+return
+end
+local moveDir = humanoid.MoveDirection
+local isGrounded = humanoid.FloorMaterial ~= Enum.Material.Air
+if isGrounded then
+linearVelocity.Enabled = true
+if moveDir.Magnitude > 0 then
+currentVelX = currentVelX + (moveDir.X * MOVE_ACCEL)
+currentVelZ = currentVelZ + (moveDir.Z * MOVE_ACCEL)
+else
+currentVelX = currentVelX * SLIDE_INERTIA
+currentVelZ = currentVelZ * SLIDE_INERTIA
+end
+local currentSpeed = math.sqrt(currentVelX^2 + currentVelZ^2)
+if currentSpeed > humanoid.WalkSpeed then
+local scale = humanoid.WalkSpeed / currentSpeed
+currentVelX = currentVelX * scale
+currentVelZ = currentVelZ * scale
+end
+linearVelocity.PlaneVelocity = Vector2.new(currentVelX, currentVelZ)
+else
+linearVelocity.Enabled = false
+currentVelX = hrp1.AssemblyLinearVelocity.X
+currentVelZ = hrp1.AssemblyLinearVelocity.Z
+end
+end)
+humanoid.Died:Connect(function()
+if hipHeightTween then
+hipHeightTween:Cancel()
+hipHeightTween:Destroy()
+end
+if linearVelocity then
+linearVelocity:Destroy()
+end
+if attachment then
+attachment:Destroy()
+end
+end)
+-- SPAWN ANIMATION
+local Players = game:GetService("Players")
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local function playCustomAnimation(config)
+    local animation = Instance.new("Animation")
+    animation.AnimationId = "rbxassetid://" .. tostring(config.id)
+
+    local track = animator:LoadAnimation(animation)
+    
+    local layerIndex = math.clamp(config.layer or 1, 1, #PriorityLayers)
+    track.Priority = PriorityLayers[layerIndex]
+
+    local fadeTime = config.fadeTime or 0.3
+    track:Play(fadeTime)
+    track.TimePosition = config.timePos or 0
+    track:AdjustSpeed(config.speed or 1)
+
+    task.delay(config.duration or 1, function()
+        track:Stop(fadeTime)
+    end)
+end
+
+task.spawn(function()
+    local animations = {
+        { id = 321277423, layer = 2, fadeTime = 0.5, timePos = 0.5, speed = 0.0, duration = 4 },
+        { id = 97170520,  layer = 2, fadeTime = 0.5, timePos = 0.5, speed = 0.0, duration = 4 },
+        { id = 94190213,  layer = 2, fadeTime = 0.5, timePos = 1.0, speed = 0.0, duration = 4 },
+        { id = 166264948, layer = 3, fadeTime = 0.5, timePos = 0.8, speed = 0.0, duration = 4 },
+    }
+
+    for _, config in ipairs(animations) do
+        playCustomAnimation(config)
+    end
+end)
+Wait(0.05)
+-- SPAWN EFFECTS
+---======[[ SPAWN EFFECT IS IMPORTANT TO AURAAA]======---
+-- spawn beam
+task.spawn(function()
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Player = Players.LocalPlayer
+local Character = Player.Character or Player.CharacterAdded:Wait()
+local Torso = Character:WaitForChild("HumanoidRootPart")
+local Shape = Enum.MeshType.Sphere
+local Size = Vector3.new(2048, 3, 5)
+local GrowSize = Vector3.new(2048, 3, 50)
+local EndSize = Vector3.new(2048, 0, 0)
+local Position = Vector3.new(0, 0, 0)
+local Rotation = Vector3.new(180, 75.15599822998047, 90)
+local MeshScale = Vector3.new(1, 1, 1)
+local MeshOffset = Vector3.new(0, 0, 0)
+local Color = Color3.fromRGB(170, 0, 255)
+local Material = Enum.Material.Neon
+local Transparency = 0
+local Reflectance = 0
+local Anchored = true
+local CanCollide = false
+local CanTouch = false
+local CanQuery = false
+local CastShadow = false
+local SpinEnabled = true
+local SpinSpeed = 360
+local SpinAxis = "X"
+local GrowTime = 1.5
+local GrowStyle = Enum.EasingStyle.Bounce
+local GrowDirection = Enum.EasingDirection.Out
+local ShrinkTime = 3.5
+local ShrinkStyle = Enum.EasingStyle.Exponential
+local ShrinkDirection = Enum.EasingDirection.Out
+local AutoDestroy = true
+local Sphere = Instance.new("Part")
+Sphere.Name = "PurpleSphere"
+Sphere.Size = Size
+Sphere.Color = Color
+Sphere.Material = Material
+Sphere.Transparency = Transparency
+Sphere.Reflectance = Reflectance
+Sphere.Anchored = Anchored
+Sphere.CanCollide = CanCollide
+Sphere.CanTouch = CanTouch
+Sphere.CanQuery = CanQuery
+Sphere.CastShadow = CastShadow
+Sphere.CFrame = Torso.CFrame * CFrame.new(Position) * CFrame.Angles(math.rad(Rotation.X), math.rad(Rotation.Y), math.rad(Rotation.Z))
+Sphere.Parent = workspace
+local Mesh = Instance.new("SpecialMesh")
+Mesh.MeshType = Shape
+Mesh.Scale = MeshScale
+Mesh.Offset = MeshOffset
+Mesh.Parent = Sphere
+if SpinEnabled then
+task.spawn(function()
+while Sphere.Parent do
+local Delta = RunService.Heartbeat:Wait()
+local RotationAmount = math.rad(SpinSpeed) * Delta
+if SpinAxis == "X" then
+Sphere.CFrame *= CFrame.Angles(RotationAmount, 0, 0)
+elseif SpinAxis == "Y" then
+Sphere.CFrame *= CFrame.Angles(0, RotationAmount, 0)
+elseif SpinAxis == "Z" then
+Sphere.CFrame *= CFrame.Angles(0, 0, RotationAmount)
+end
+end
+end)
+end
+task.spawn(function()
+local GrowTween = TweenService:Create(
+Sphere,
+TweenInfo.new(
+GrowTime,
+GrowStyle,
+GrowDirection
+),
+{
+Size = GrowSize
+}
+)
+GrowTween:Play()
+GrowTween.Completed:Wait()
+local ShrinkTween = TweenService:Create(
+Sphere,
+TweenInfo.new(
+ShrinkTime,
+ShrinkStyle,
+ShrinkDirection
+),
+{
+Size = EndSize
+}
+)
+ShrinkTween:Play()
+ShrinkTween.Completed:Wait()
+if AutoDestroy and Sphere.Parent then
+Sphere:Destroy()
+end
+end)
+end)
+-- pendulium sonic boom
+local SPHERE_SIZE = Vector3.new(2, 2, 2)
+local TWEEN_SIZE_A = Vector3.new(25, 10, 1)
+local TWEEN_SIZE_B = Vector3.new(10, 10, 3)
+local SPHERE_COLOR = Color3.fromRGB(128, 0, 255)
+local SPHERE_TRANSPARENCY = 0
+local TWEEN_TIME = 1.5
+local SPAWN_INTERVAL = 0.8
+
+local TweenService = game:GetService("TweenService")
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local torso = character:WaitForChild("Torso", 5) or character:WaitForChild("UpperTorso", 5)
+local humanoid = character:WaitForChild("Humanoid")
+local function spawnSphere(tweenSize)
+local sphere = Instance.new("Part")
+sphere.Name = "DebugSphere"
+sphere.Shape = Enum.PartType.Ball
+sphere.Size = SPHERE_SIZE
+sphere.Color = SPHERE_COLOR
+sphere.Material = Enum.Material.Neon
+sphere.Transparency = SPHERE_TRANSPARENCY
+sphere.Anchored = true
+sphere.CanCollide = false
+sphere.Massless = true
+sphere.CFrame = torso.CFrame
+sphere.Parent = workspace
+local mesh = Instance.new("SpecialMesh")
+mesh.MeshType = Enum.MeshType.Sphere
+mesh.Scale = Vector3.new(1, 1, 1)
+mesh.TextureId = ""
+mesh.Parent = sphere
+local tweenInfo = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Linear)
+local tween = TweenService:Create(sphere, tweenInfo, {Size = tweenSize, Transparency = 1})
+tween.Completed:Connect(function()
+sphere:Destroy()
+end)
+tween:Play()
+end
+local function isWalking()
+return humanoid:GetState() == Enum.HumanoidStateType.Running and humanoid.MoveDirection.Magnitude > 0
+end
+local running = true
+humanoid.Died:Connect(function()
+running = false
+end)
+task.spawn(function()
+while running do
+if isWalking() then
+spawnSphere(TWEEN_SIZE_A)
+spawnSphere(TWEEN_SIZE_B)
+end
+task.wait(SPAWN_INTERVAL)
+end
+end)
+-- HALO
+local RADIUS = 2
+local HEIGHT_OFFSET = 1
+local BACK_OFFSET = 1.5
+local SEGMENT_COUNT = 15
+local SEGMENT_SIZE = Vector3.new(0.3, 0.3, 0.9)
+local HALO_COLOR = Color3.fromRGB(170, 0, 255)
+local HALO_MATERIAL = Enum.Material.Neon
+local ADD_LIGHT = true
+local LIGHT_BRIGHTNESS = 3
+local LIGHT_RANGE = 10
+local TILT_ANGLE_X = 90
+local SPIN_SPEED_Y = 300
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local player = Players.LocalPlayer
+
+local targetFolder = workspace:WaitForChild(player.Name):WaitForChild(player.Name .. "_Clone")
+local torso = targetFolder:WaitForChild("Torso")
+
+local haloModel = Instance.new("Model")
+haloModel.Name = "PurpleHalo"
+haloModel.Parent = targetFolder
+
+local center = Instance.new("Part")
+center.Name = "HaloCenter"
+center.Size = Vector3.new(0.2, 0.2, 0.2)
+center.Transparency = 1
+center.Anchored = false
+center.CanCollide = false
+center.CastShadow = false
+center.CFrame = torso.CFrame * CFrame.new(0, HEIGHT_OFFSET, BACK_OFFSET)
+center.Parent = haloModel
+
+local centerWeld = Instance.new("Weld")
+centerWeld.Part0 = torso
+centerWeld.Part1 = center
+centerWeld.C0 = CFrame.new(0, HEIGHT_OFFSET, BACK_OFFSET)
+centerWeld.Parent = center
+
+local segments = {}
+
+for i = 1, SEGMENT_COUNT do
+local angle = (i / SEGMENT_COUNT) * math.pi * 2
+local x = math.cos(angle) * RADIUS
+local z = math.sin(angle) * RADIUS
+local segment = Instance.new("Part")
+segment.Name = "HaloSegment"
+segment.Size = SEGMENT_SIZE
+segment.Color = HALO_COLOR
+segment.Material = HALO_MATERIAL
+segment.Anchored = false
+segment.CanCollide = false
+segment.CastShadow = false
+segment.CFrame = center.CFrame * CFrame.new(x, 0, z)
+segment.Parent = haloModel
+local weld = Instance.new("WeldConstraint")
+weld.Part0 = center
+weld.Part1 = segment
+weld.Parent = segment
+table.insert(segments, segment)
+end
+
+if ADD_LIGHT then
+local light = Instance.new("PointLight")
+light.Color = HALO_COLOR
+light.Brightness = LIGHT_BRIGHTNESS
+light.Range = LIGHT_RANGE
+light.Parent = center
+end
+
+local spinAngleY = 0
+RunService.Heartbeat:Connect(function(deltaTime)
+spinAngleY = spinAngleY + deltaTime * SPIN_SPEED_Y
+centerWeld.C0 = CFrame.new(0, HEIGHT_OFFSET, BACK_OFFSET) * CFrame.Angles(math.rad(TILT_ANGLE_X), spinAngleY, 0)
+for _, segment in ipairs(segments) do
+segment.Transparency = 0
+segment.LocalTransparencyModifier = 0
+end
+end)
+Wait(4.5)
+-- AURA EFFECT PILLAR SPHERE (PURPLE)
+local SPHERE_SIZE = Vector3.new(2, 2, 2)
+local TWEEN_SIZE = Vector3.new(3, 40, 3)
+local SPHERE_COLOR = Color3.fromRGB(128, 0, 255)
+local SPHERE_TRANSPARENCY = 0
+local TWEEN_TIME = 1.5
+local SPAWN_RADIUS = 15
+local SPAWN_INTERVAL = 0.3
+
+local TweenService = game:GetService("TweenService")
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local torso = character:WaitForChild("Torso", 5) or character:WaitForChild("UpperTorso", 5)
+local humanoid = character:WaitForChild("Humanoid")
+
+local function spawnSphere(position)
+local sphere = Instance.new("Part")
+sphere.Name = "DebugSphere"
+sphere.Shape = Enum.PartType.Ball
+sphere.Size = SPHERE_SIZE
+sphere.Color = SPHERE_COLOR
+sphere.Material = Enum.Material.Neon
+sphere.Transparency = SPHERE_TRANSPARENCY
+sphere.Anchored = true
+sphere.CanCollide = false
+sphere.Massless = true
+sphere.CFrame = CFrame.new(position)
+sphere.Parent = workspace
+
+local mesh = Instance.new("SpecialMesh")
+mesh.MeshType = Enum.MeshType.Sphere
+mesh.Scale = Vector3.new(1, 1, 1)
+mesh.TextureId = ""
+mesh.Parent = sphere
+
+local tweenInfo = TweenInfo.new(TWEEN_TIME, Enum.EasingStyle.Linear)
+local tween = TweenService:Create(sphere, tweenInfo, {Size = TWEEN_SIZE, Transparency = 1})
+
+tween.Completed:Connect(function()
+sphere:Destroy()
+end)
+
+tween:Play()
+end
+
+local running = true
+
+humanoid.Died:Connect(function()
+running = false
+end)
+
+task.spawn(function()
+while running do
+local angle = math.random() * math.pi * 2
+local radius = math.random() * SPAWN_RADIUS
+local offset = Vector3.new(math.cos(angle) * radius, 0, math.sin(angle) * radius)
+spawnSphere(torso.Position + offset)
+task.wait(SPAWN_INTERVAL)
+end
+end)
+--- [[ AIR / GAS / SMOKE OUTWARD SWOOSH ]] --
+local TweenService = game:GetService("TweenService")
+
+local START_SIZE = 1
+local MIN_SIZE = 2
+local MAX_SIZE = 4
+local SPREAD_RADIUS = 20
+local MIN_SPREAD_RATIO = 0.6
+local SPACING_FACTOR = 0.8
+local ANGLE_JITTER = 0.15
+local TILT_JITTER = 15
+local ROTATION_OFFSET = 180
+local EXPAND_TIME = 0.6
+local START_TRANSPARENCY = 0.5
+local BLOCK_COLOR = Color3.fromRGB(200, 200, 200)
+local Y_OFFSET = -6
+local SPAWN_INTERVAL = 0.3
+
+local function CreateCrater(position)
+local AVG_SIZE = (MIN_SIZE + MAX_SIZE) / 2
+local ringRadius = SPREAD_RADIUS * ((1 + MIN_SPREAD_RATIO) / 2)
+local circumference = 2 * math.pi * ringRadius
+local BLOCK_COUNT = math.max(1, math.ceil(circumference / (AVG_SIZE * SPACING_FACTOR)))
+for i = 1, BLOCK_COUNT do
+local size = math.random(MIN_SIZE * 10, MAX_SIZE * 10) / 10
+local baseAngle = (i / BLOCK_COUNT) * math.pi * 2
+local angle = baseAngle + (math.random() * 2 - 1) * ANGLE_JITTER
+local minDist = SPREAD_RADIUS * MIN_SPREAD_RATIO
+local dist = minDist + math.random(0, (SPREAD_RADIUS - minDist) * 10) / 10
+local outward = Vector3.new(math.cos(angle), 0, math.sin(angle))
+local offset = outward * dist
+local startPosition = position + Vector3.new(0, Y_OFFSET, 0)
+local targetPosition = position + offset + Vector3.new(0, Y_OFFSET, 0)
+local tiltX = math.rad(math.random(-TILT_JITTER, TILT_JITTER))
+local tiltZ = math.rad(math.random(-TILT_JITTER, TILT_JITTER))
+local rotation = CFrame.new(Vector3.new(), outward) * CFrame.Angles(0, math.rad(ROTATION_OFFSET), 0) * CFrame.Angles(tiltX, 0, tiltZ)
+local block = Instance.new("WedgePart")
+block.Size = Vector3.new(START_SIZE, START_SIZE, START_SIZE)
+block.CFrame = CFrame.new(startPosition) * rotation
+block.Transparency = START_TRANSPARENCY
+block.Color = BLOCK_COLOR
+block.Material = Enum.Material.Slate
+block.Anchored = true
+block.CanCollide = false
+block.Parent = workspace
+local expandTween = TweenService:Create(block, TweenInfo.new(EXPAND_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Size = Vector3.new(size, size, size), Position = targetPosition, Transparency = 1})
+expandTween.Completed:Connect(function()
+block:Destroy()
+end)
+expandTween:Play()
+end
+end
+
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local rootPart = character:WaitForChild("HumanoidRootPart")
+local humanoid = character:WaitForChild("Humanoid")
+
+local running = true
+
+humanoid.Died:Connect(function()
+running = false
+end)
+
+task.spawn(function()
+while running do
+if rootPart and rootPart.Parent then
+CreateCrater(rootPart.Position)
+end
+task.wait(SPAWN_INTERVAL)
+end
+end)
+--===== + [[ HEAD MOVEMENT ANIMATIONS ]] + =====--
+local RunService = game:GetService("RunService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+local hrp = character:WaitForChild("HumanoidRootPart")
+local camera = workspace.CurrentCamera
+
+local PriorityLayers = {
+Enum.AnimationPriority.Core,
+Enum.AnimationPriority.Idle,
+Enum.AnimationPriority.Movement,
+Enum.AnimationPriority.Action,
+Enum.AnimationPriority.Action2,
+Enum.AnimationPriority.Action3,
+Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layerIndex)
+layerIndex = math.clamp(layerIndex, 1, #PriorityLayers)
+track.Priority = PriorityLayers[layerIndex]
+end
+
+local leftAnim = Instance.new("Animation")
+leftAnim.AnimationId = "rbxassetid://93693205"
+local leftTrack = animator:LoadAnimation(leftAnim)
+SetLayer(leftTrack, 2)
+
+local rightAnim = Instance.new("Animation")
+rightAnim.AnimationId = "rbxassetid://88016955"
+local rightTrack = animator:LoadAnimation(rightAnim)
+SetLayer(rightTrack, 3)
+
+local downAnim = Instance.new("Animation")
+downAnim.AnimationId = "rbxassetid://68433924"
+local downTrack = animator:LoadAnimation(downAnim)
+SetLayer(downTrack, 3)
+
+local fullyDownAnim = Instance.new("Animation")
+fullyDownAnim.AnimationId = "rbxassetid://68433924"
+local fullyDownTrack = animator:LoadAnimation(fullyDownAnim)
+SetLayer(fullyDownTrack, 3)
+
+local upAnim = Instance.new("Animation")
+upAnim.AnimationId = "rbxassetid://165167557"
+local upTrack = animator:LoadAnimation(upAnim)
+SetLayer(upTrack, 2)
+
+local currentHorizontal = "Center"
+local currentVertical = "Center"
+
+local lastDot = 0
+local lastLookY = 0
+
+local HORIZONTAL_THRESHOLD = 0.35
+local UP_THRESHOLD = 0.35
+local DOWN_THRESHOLD = -0.35
+local FULLY_DOWN_THRESHOLD = -0.75
+
+local BASE_FADE = 0.5
+local MIN_FADE_TIME = 0.3
+
+local renderConnection
+
+local function StopAllAnimations()
+if leftTrack.IsPlaying then leftTrack:Stop(MIN_FADE_TIME) end
+if rightTrack.IsPlaying then rightTrack:Stop(MIN_FADE_TIME) end
+if upTrack.IsPlaying then upTrack:Stop(MIN_FADE_TIME) end
+if downTrack.IsPlaying then downTrack:Stop(MIN_FADE_TIME) end
+if fullyDownTrack.IsPlaying then fullyDownTrack:Stop(MIN_FADE_TIME) end
+end
+
+renderConnection = RunService.RenderStepped:Connect(function(deltaTime)
+if workspace:FindFirstChild("SCRIPT_STOP") then
+StopAllAnimations()
+if renderConnection then
+renderConnection:Disconnect()
+renderConnection = nil
+end
+return
+end
+
+local cameraLook = camera.CFrame.LookVector
+local flatCameraLook = Vector3.new(cameraLook.X, 0, cameraLook.Z).Unit
+
+local dot = hrp.CFrame.RightVector:Dot(flatCameraLook)
+local turnSpeed = math.abs(dot - lastDot) / deltaTime
+lastDot = dot
+
+local newHorizontal = "Center"
+if dot > HORIZONTAL_THRESHOLD then
+newHorizontal = "Right"
+elseif dot < -HORIZONTAL_THRESHOLD then
+newHorizontal = "Left"
+end
+
+if newHorizontal ~= currentHorizontal then
+local hSpeedFactor = math.clamp(turnSpeed / 3, 0, 1)
+local fade = math.clamp(BASE_FADE * (1 - hSpeedFactor * 0.4), MIN_FADE_TIME, BASE_FADE)
+
+if newHorizontal == "Left" then
+if rightTrack.IsPlaying then rightTrack:Stop(fade) end
+leftTrack:Play(fade)
+leftTrack.TimePosition = 0.3
+leftTrack:AdjustSpeed(0)
+
+elseif newHorizontal == "Right" then
+if leftTrack.IsPlaying then leftTrack:Stop(fade) end
+rightTrack:Play(fade)
+rightTrack.TimePosition = 0
+rightTrack:AdjustSpeed(1)
+
+else
+if leftTrack.IsPlaying then leftTrack:Stop(fade) end
+if rightTrack.IsPlaying then rightTrack:Stop(fade) end
+end
+
+currentHorizontal = newHorizontal
+end
+
+local lookY = cameraLook.Y
+local pitchSpeed = math.abs(lookY - lastLookY) / deltaTime
+lastLookY = lookY
+
+local newVertical = "Center"
+if lookY >= UP_THRESHOLD then
+newVertical = "Up"
+elseif lookY <= FULLY_DOWN_THRESHOLD then
+newVertical = "FullyDown"
+elseif lookY <= DOWN_THRESHOLD then
+newVertical = "Down"
+end
+
+if newVertical ~= currentVertical then
+local vSpeedFactor = math.clamp(pitchSpeed / 3, 0, 1)
+local fade = math.clamp(BASE_FADE * (1 - vSpeedFactor * 0.4), MIN_FADE_TIME, BASE_FADE)
+
+if newVertical == "Up" then
+if downTrack.IsPlaying then downTrack:Stop(fade) end
+if fullyDownTrack.IsPlaying then fullyDownTrack:Stop(fade) end
+upTrack:Play(fade)
+upTrack.TimePosition = 0.3
+upTrack:AdjustSpeed(0)
+
+elseif newVertical == "Down" then
+if upTrack.IsPlaying then upTrack:Stop(fade) end
+if fullyDownTrack.IsPlaying then fullyDownTrack:Stop(fade) end
+downTrack:Play(fade)
+downTrack.TimePosition = 0.75
+downTrack:AdjustSpeed(0)
+
+elseif newVertical == "FullyDown" then
+if upTrack.IsPlaying then upTrack:Stop(fade) end
+if downTrack.IsPlaying then downTrack:Stop(fade) end
+fullyDownTrack:Play(fade)
+fullyDownTrack.TimePosition = 0.65
+fullyDownTrack:AdjustSpeed(0)
+
+else
+if upTrack.IsPlaying then upTrack:Stop(fade) end
+if downTrack.IsPlaying then downTrack:Stop(fade) end
+if fullyDownTrack.IsPlaying then fullyDownTrack:Stop(fade) end
+end
+
+currentVertical = newVertical
+end
+end)
+
+--===== + [[ IDLE, WALK, JUMP ANIMATIONS ]] + =====--
+-- walking animation
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local walkAnimationConfigs = {
+    { id = "rbxassetid://242455877", layer = 3, timePos = 0.9, speed = 0, fade = 0.35 },
+    { id = "rbxassetid://233064613", layer = 3, timePos = 0.5, speed = 0, fade = 0.35 }
+}
+
+local loadedWalkTracks = {}
+
+for _, config in ipairs(walkAnimationConfigs) do
+    local animation = Instance.new("Animation")
+    animation.AnimationId = config.id
+
+    local track = animator:LoadAnimation(animation)
+    track.Priority = PriorityLayers[math.clamp(config.layer, 1, #PriorityLayers)]
+    
+    table.insert(loadedWalkTracks, {
+        track = track,
+        config = config
+    })
+end
+
+local function playWalkTracks()
+    for _, item in ipairs(loadedWalkTracks) do
+        if not item.track.IsPlaying then
+            item.track:Play(item.config.fade)
+            item.track.TimePosition = item.config.timePos
+            item.track:AdjustSpeed(item.config.speed)
+        end
+    end
+end
+
+local function stopWalkTracks()
+    for _, item in ipairs(loadedWalkTracks) do
+        if item.track.IsPlaying then
+            item.track:Stop(0.2)
+        end
+    end
+end
+
+task.spawn(function()
+    humanoid.Running:Connect(function(speed)
+        if speed > 0.1 then
+            playWalkTracks()
+        else
+            stopWalkTracks()
+        end
+    end)
+
+    humanoid.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Jumping or newState == Enum.HumanoidStateType.Freefall then
+            stopWalkTracks()
+        end
+    end)
+end)
+-- jump
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local jumpAnimationConfigs = {
+    { id = "rbxassetid://94861246",  layer = 4, timePos = 1, speed = 0, fade = 0.35 },
+    { id = "rbxassetid://241279220", layer = 3, timePos = 1, speed = 0, fade = 0.35 },
+    { id = "rbxassetid://233064613", layer = 2, timePos = 0.5, speed = 0, fade = 0.35 }
+}
+
+local loadedJumpTracks = {}
+
+for _, config in ipairs(jumpAnimationConfigs) do
+    local animation = Instance.new("Animation")
+    animation.AnimationId = config.id
+
+    local track = animator:LoadAnimation(animation)
+    track.Priority = PriorityLayers[math.clamp(config.layer, 1, #PriorityLayers)]
+    
+    table.insert(loadedJumpTracks, {
+        track = track,
+        config = config
+    })
+end
+
+local function playJumpTracks()
+    for _, item in ipairs(loadedJumpTracks) do
+        if not item.track.IsPlaying then
+            item.track:Play(item.config.fade)
+            item.track.TimePosition = item.config.timePos
+            item.track:AdjustSpeed(item.config.speed)
+        end
+    end
+end
+
+local function stopJumpTracks()
+    for _, item in ipairs(loadedJumpTracks) do
+        if item.track.IsPlaying then
+            item.track:Stop(0.2)
+        end
+    end
+end
+
+task.spawn(function()
+    humanoid.Jumping:Connect(function()
+        if humanoid.MoveDirection.Magnitude <= 0 then
+            playJumpTracks()
+        end
+    end)
+
+    humanoid.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Running or newState == Enum.HumanoidStateType.RunningNoPhysics then
+            stopJumpTracks()
+        end
+    end)
+end)
+--jump2
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local walkJumpAnimationConfigs = {
+    { id = "rbxassetid://94190213",  layer = 2, timePos = 0.6, speed = 0, fade = 0.5 },
+    { id = "rbxassetid://242455877", layer = 3, timePos = 0.8, speed = 0, fade = 0 }
+}
+
+local loadedWalkJumpTracks = {}
+
+for _, config in ipairs(walkJumpAnimationConfigs) do
+    local animation = Instance.new("Animation")
+    animation.AnimationId = config.id
+
+    local track = animator:LoadAnimation(animation)
+    track.Priority = PriorityLayers[math.clamp(config.layer, 1, #PriorityLayers)]
+    
+    table.insert(loadedWalkJumpTracks, {
+        track = track,
+        config = config
+    })
+end
+
+local function playWalkJumpTracks()
+    for _, item in ipairs(loadedWalkJumpTracks) do
+        if not item.track.IsPlaying then
+            item.track:Play(item.config.fade)
+            item.track.TimePosition = item.config.timePos
+            item.track:AdjustSpeed(item.config.speed)
+        end
+    end
+end
+
+local function stopWalkJumpTracks()
+    for _, item in ipairs(loadedWalkJumpTracks) do
+        if item.track.IsPlaying then
+            item.track:Stop(0.2)
+        end
+    end
+end
+
+task.spawn(function()
+    humanoid.Jumping:Connect(function()
+        if humanoid.MoveDirection.Magnitude > 0 then
+            playWalkJumpTracks()
+        end
+    end)
+
+    humanoid.StateChanged:Connect(function(_, newState)
+        if newState == Enum.HumanoidStateType.Landed or newState == Enum.HumanoidStateType.Running or newState == Enum.HumanoidStateType.RunningNoPhysics then
+            stopWalkJumpTracks()
+        end
+    end)
+end)
+
+--idle
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local animator = humanoid:WaitForChild("Animator")
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local animationConfigs = {
+    { id = "rbxassetid://94190213",  layer = 2, timePos = 1.5, speed = 0, fade = 0.5 },
+    { id = "rbxassetid://126753849", layer = 3, timePos = 0.4, speed = 0, fade = 0.5 },
+    { id = "rbxassetid://188242481", layer = 3, timePos = 0.4, speed = 0, fade = 0.4 },
+    { id = "rbxassetid://56153856",  layer = 3, timePos = 2.0, speed = 0, fade = 0.5 },
+    { id = "rbxassetid://80979197",  layer = 2, timePos = 0.0, speed = 1, fade = 0.5 },
+    { id = "rbxassetid://242455877", layer = 3, timePos = 0.8, speed = 0, fade = 0.5 }
+}
+
+local loadedTracks = {}
+
+for _, config in ipairs(animationConfigs) do
+    local animation = Instance.new("Animation")
+    animation.AnimationId = config.id
+
+    local track = animator:LoadAnimation(animation)
+    track.Priority = PriorityLayers[math.clamp(config.layer, 1, #PriorityLayers)]
+    
+    table.insert(loadedTracks, {
+        track = track,
+        config = config
+    })
+end
+
+local function playIdleTracks()
+    for _, item in ipairs(loadedTracks) do
+        if not item.track.IsPlaying then
+            item.track:Play(item.config.fade)
+            item.track.TimePosition = item.config.timePos
+            item.track:AdjustSpeed(item.config.speed)
+        end
+    end
+end
+
+local function stopIdleTracks()
+    for _, item in ipairs(loadedTracks) do
+        if item.track.IsPlaying then
+            item.track:Stop(0.2)
+        end
+    end
+end
+
+task.spawn(function()
+    playIdleTracks()
+
+    humanoid.Running:Connect(function(speed)
+        if speed > 0.1 then
+            stopIdleTracks()
+        else
+            playIdleTracks()
+        end
+    end)
+
+    humanoid.Jumping:Connect(function()
+        stopIdleTracks()
+    end)
+
+    humanoid.FreeFall:Connect(function(active)
+        if not active and humanoid.MoveDirection.Magnitude <= 0 then
+            playIdleTracks()
+        end
+    end)
+end)
