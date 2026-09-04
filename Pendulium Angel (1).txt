@@ -1,3 +1,6 @@
+
+--[[ EXECUTOR REGISTER SCOPE: GUI ]]--
+do
 ----++++====[[SKILLSSSS ANDDDD GUIIIIS]]====++++------
 
 local Players = game:GetService("Players")
@@ -982,6 +985,11 @@ player.CharacterAdded:Connect(OnCharacterAdded)
 
 
 Wait(0.1)
+
+end -- executor scope
+
+--[[ EXECUTOR REGISTER SCOPE: TILT ]]--
+do
 --=======+ [[ tilt and hip height pendulium ]] +========--
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
@@ -1039,33 +1047,71 @@ end
 c.DescendantAdded:Connect(function(descendant)
 storeAndHide(descendant)
 end)
+-- Build exact clone/original mappings by hierarchy path.
+-- Name-only matching breaks when several accessories contain a "Handle"
+-- (front/back/waist/etc.), causing the wrong accessory to receive another
+-- accessory's CFrame.
+local function getRelativePath(root, object)
+    local parts = {}
+    local current = object
+
+    while current and current ~= root do
+        table.insert(parts, 1, current.Name)
+        current = current.Parent
+    end
+
+    if current ~= root then
+        return nil
+    end
+
+    return table.concat(parts, "\0")
+end
+
+local function findByRelativePath(root, path)
+    local current = root
+    for segment in string.gmatch(path, "[^\0]+") do
+        current = current:FindFirstChild(segment)
+        if not current then
+            return nil
+        end
+    end
+    return current
+end
+
 local partPairs = {}
 local cloneParts = {}
+
 for _, object in ipairs(clone:GetDescendants()) do
-if object:IsA("Script") or object:IsA("LocalScript") then
-object:Destroy()
-elseif object:IsA("Motor6D") then
-object:Destroy()
-elseif object:IsA("BasePart") then
-object.CanCollide = false
-object.CanTouch = false
-object.CanQuery = false
-object.Massless = true
-object.Anchored = true
-pcall(function() object.CollisionGroup = CLONE_GROUP end)
-table.insert(cloneParts, object)
-if object.Name == "HumanoidRootPart" then
-object.Transparency = 1
-else
-object.Transparency = 0
-local realPart = c:FindFirstChild(object.Name, true)
-if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
-table.insert(partPairs, {real = realPart, clone = object})
-end
-end
-elseif object:IsA("Decal") or object:IsA("Texture") then
-object.Transparency = 0
-end
+    -- The visual clone is driven entirely by the real character's CFrames,
+    -- so remove every joint/constraint that could fight that manual update.
+    if object:IsA("Script") or object:IsA("LocalScript") then
+        object:Destroy()
+    elseif object:IsA("JointInstance") or object:IsA("WeldConstraint") or object:IsA("Constraint") then
+        object:Destroy()
+    elseif object:IsA("BasePart") then
+        object.CanCollide = false
+        object.CanTouch = false
+        object.CanQuery = false
+        object.Massless = true
+        object.Anchored = true
+        pcall(function() object.CollisionGroup = CLONE_GROUP end)
+        table.insert(cloneParts, object)
+
+        if object.Name == "HumanoidRootPart" then
+            object.Transparency = 1
+        else
+            object.Transparency = 0
+
+            local path = getRelativePath(clone, object)
+            local realPart = path and findByRelativePath(c, path) or nil
+
+            if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
+                table.insert(partPairs, {real = realPart, clone = object})
+            end
+        end
+    elseif object:IsA("Decal") or object:IsA("Texture") then
+        object.Transparency = 0
+    end
 end
 local camera = Workspace.CurrentCamera
 hrp0.Transparency = 1
@@ -1285,6 +1331,11 @@ if attachment then
 attachment:Destroy()
 end
 end)
+
+end -- executor scope
+
+--[[ EXECUTOR REGISTER SCOPE: SPAWN_ANIM ]]--
+do
 -- SPAWN ANIMATION
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
@@ -1334,6 +1385,11 @@ task.spawn(function()
     end
 end)
 Wait(0.05)
+
+end -- executor scope
+
+--[[ EXECUTOR REGISTER SCOPE: SPAWN_EFFECTS ]]--
+do
 -- SPAWN EFFECTS
 ---======[[ SPAWN EFFECT IS IMPORTANT TO AURAAA]======---
 -- spawn beam
@@ -1708,6 +1764,11 @@ end
 task.wait(SPAWN_INTERVAL)
 end
 end)
+
+end -- executor scope
+
+--[[ EXECUTOR REGISTER SCOPE: HEAD ]]--
+do
 --===== + [[ HEAD MOVEMENT ANIMATIONS ]] + =====--
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
@@ -1879,6 +1940,11 @@ currentVertical = newVertical
 end
 end)
 
+
+end -- executor scope
+
+--[[ EXECUTOR REGISTER SCOPE: IDLE ]]--
+do
 --===== + [[ IDLE, WALK, JUMP ANIMATIONS ]] + =====--
 -- walking animation
 local player = game.Players.LocalPlayer
@@ -2164,3 +2230,4 @@ task.spawn(function()
         end
     end)
 end)
+end -- executor scope
