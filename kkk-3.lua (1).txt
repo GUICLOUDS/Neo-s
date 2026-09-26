@@ -6,6 +6,77 @@ local Workspace = game:GetService("Workspace")
 local Debris = game:GetService("Debris")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
+local mr = nil
+local tr = nil
+local cc = nil
+local attachMode = "target"
+local attachPositionOffset = Vector3.zero
+local attachRotation = CFrame.identity
+
+local function getAttachCFrame(targetRoot)
+	if attachMode == "custom" and targetRoot then
+		return CFrame.new(targetRoot.Position + attachPositionOffset) * attachRotation
+	end
+	return targetRoot and targetRoot.CFrame or CFrame.new()
+end
+
+local function dt()
+	if cc then
+		cc:Disconnect()
+		cc = nil
+	end
+	if sethiddenproperty and mr then
+		pcall(function()
+			sethiddenproperty(mr, "PhysicsRepRootPart", nil)
+		end)
+	end
+	if mr and mr.Parent then
+		local h = mr.Parent:FindFirstChildOfClass("Humanoid")
+		if h then
+			pcall(function()
+				h.AutoRotate = true
+				h.PlatformStand = false
+				h.Sit = false
+				h:ChangeState(Enum.HumanoidStateType.GettingUp)
+			end)
+		end
+		mr.AssemblyLinearVelocity = Vector3.zero
+		mr.AssemblyAngularVelocity = Vector3.zero
+	end
+	mr = nil
+	tr = nil
+end
+
+local function at(myRoot, targetRoot)
+	dt()
+	if not myRoot or not targetRoot or myRoot == targetRoot then return end
+	mr = myRoot
+	tr = targetRoot
+	myRoot.CFrame = getAttachCFrame(targetRoot)
+	myRoot.AssemblyLinearVelocity = Vector3.zero
+	myRoot.AssemblyAngularVelocity = Vector3.zero
+	if sethiddenproperty then
+		pcall(function()
+			sethiddenproperty(myRoot, "PhysicsRepRootPart", targetRoot)
+		end)
+	end
+	cc = RunService.Heartbeat:Connect(function()
+		if not (myRoot and myRoot.Parent) or not (targetRoot and targetRoot.Parent) then
+			dt()
+			return
+		end
+		myRoot.CFrame = getAttachCFrame(targetRoot)
+		myRoot.AssemblyLinearVelocity = Vector3.zero
+		myRoot.AssemblyAngularVelocity = Vector3.zero
+		if sethiddenproperty then
+			pcall(function()
+				sethiddenproperty(myRoot, "PhysicsRepRootPart", targetRoot)
+			end)
+		end
+	end)
+end
+
+
 local player = Players.LocalPlayer
 local character = player.Character or player.CharacterAdded:Wait()
 local humanoid = character:WaitForChild("Humanoid")
@@ -1011,25 +1082,35 @@ local function executeSkill1()
 			local _, skill1AuraCleanup = attachAura(hrp, Color3.fromRGB(255, 200, 80))
 			task.delay(duration, skill1AuraCleanup)
 
-			local attachConnection
-			attachConnection = RunService.Heartbeat:Connect(function()
-				if humanoid.Health <= 0 or not targetChar or not targetRoot then
-					if attachConnection then attachConnection:Disconnect() end
+			attachMode = "custom"
+			attachPositionOffset = finalOffset
+			attachRotation = CFrame.fromEulerAnglesYXZ(currentFlipAngle, myY, myZ)
+			at(hrp, targetRoot)
+
+			local attachTransformConnection
+			attachTransformConnection = RunService.Heartbeat:Connect(function()
+				if humanoid.Health <= 0 or not targetChar or not targetChar.Parent or not targetRoot or not targetRoot.Parent then
+					if attachTransformConnection then
+						attachTransformConnection:Disconnect()
+						attachTransformConnection = nil
+					end
+					dt()
 					return
 				end
-				pcall(function()
-					sethiddenproperty(hrp, "PhysicsRepRootPart", targetRoot)
-				end)
-
-				local basePosition = targetRoot.Position + finalOffset
-				hrp.CFrame = CFrame.new(basePosition) * CFrame.fromEulerAnglesYXZ(currentFlipAngle, myY, myZ)
-				hrp.Velocity = Vector3.zero
-				hrp.RotVelocity = Vector3.zero
+				attachPositionOffset = finalOffset
+				attachRotation = CFrame.fromEulerAnglesYXZ(currentFlipAngle, myY, myZ)
 			end)
 
 			task.wait(duration)
 
-			if attachConnection then attachConnection:Disconnect() end
+			if attachTransformConnection then
+				attachTransformConnection:Disconnect()
+				attachTransformConnection = nil
+			end
+			dt()
+			attachMode = "target"
+			attachPositionOffset = Vector3.zero
+			attachRotation = CFrame.identity
 
 			if humanoid.Health > 0 then
 				local _, currentY, _ = hrp.CFrame:ToEulerAnglesYXZ()
@@ -1292,7 +1373,6 @@ local function executeSkill3()
 		end
 	end
 
-	local skill3AttachConnection
 	local skill3FaceY = currentYaw
 
 	if skill3TargetPlayer and skill3TargetRoot then
@@ -1325,20 +1405,10 @@ local function executeSkill3()
 		local _, myY, _ = faceTargetCFrame:ToEulerAnglesYXZ()
 		skill3FaceY = myY
 
-		skill3AttachConnection = RunService.Heartbeat:Connect(function()
-			if humanoid.Health <= 0 or not targetChar or not skill3TargetRoot then
-				if skill3AttachConnection then skill3AttachConnection:Disconnect() end
-				return
-			end
-			pcall(function()
-				sethiddenproperty(hrp, "PhysicsRepRootPart", skill3TargetRoot)
-			end)
-
-			local basePosition = skill3TargetRoot.Position + finalOffset
-			hrp.CFrame = CFrame.new(basePosition) * CFrame.fromEulerAnglesYXZ(0, skill3FaceY, 0)
-			hrp.Velocity = Vector3.zero
-			hrp.RotVelocity = Vector3.zero
-		end)
+		attachMode = "custom"
+		attachPositionOffset = finalOffset
+		attachRotation = CFrame.fromEulerAnglesYXZ(0, skill3FaceY, 0)
+		at(hrp, skill3TargetRoot)
 	end
 
 	local isR15Target = false
@@ -1372,10 +1442,10 @@ local function executeSkill3()
 
 	task.wait(0.3)
 
-	if skill3AttachConnection then
-		skill3AttachConnection:Disconnect()
-		skill3AttachConnection = nil
-	end
+	dt()
+	attachMode = "target"
+	attachPositionOffset = Vector3.zero
+	attachRotation = CFrame.identity
 	if humanoid.Sit then
 		humanoid.Sit = false
 	end
