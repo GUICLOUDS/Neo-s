@@ -7601,7 +7601,7 @@ function ExecEmoteImmediate(e)
         end
 
         local anim = Instance.new("Animation")
-        anim.Name = e.Name .. "_EWV5"
+        anim.Name = (AnimationIdMode == "VERSION_COVER" or AnimationIdMode == "VERSION") and "Version Cover" or "GUID Cover"
         local numericId = tonumber(tostring(e.AnimationId):match("(%d+)$"))
         if not numericId then
             anim:Destroy()
@@ -8339,7 +8339,7 @@ function RunRig(clone, e)
             local anim = Instance.new("Animation")
             local numericId = tonumber(tostring(e.AnimationId):match("(%d+)$"))
             if not numericId then return end
-            anim.Name = e.Name .. "_EWV5_Clone"
+            anim.Name = (AnimationIdMode == "VERSION_COVER" or AnimationIdMode == "VERSION") and "Version Cover" or "GUID Cover"
             anim.AnimationId = BuildEmoteAnimationId(numericId)
             local track
             local ok = pcall(function()
@@ -9043,7 +9043,7 @@ ListeningJumpStopKey = false
 JumpStopKeyBtn = nil
 InterfaceScale = 1.00
 LastEmoteName = nil
-AnimationIdMode = "GUID"
+AnimationIdMode = "GUID_COVER"
 
 SETTINGS_FOLDER = "EmoteWheelV5"
 SETTINGS_FILE = SETTINGS_FOLDER .. "/settings.txt"
@@ -9064,16 +9064,7 @@ function BuildEmoteAnimationId(numericId)
     numericId = tonumber(numericId)
     if not numericId then return nil end
 
-    local mode = AnimationIdMode
-    if mode == "GUID_COVER" then
-        mode = "GUID"
-    elseif mode == "VERSION_COVER" then
-        mode = "VERSION"
-    end
-
-    if mode == "RBXASSETID" then
-        return "rbxassetid://" .. tostring(numericId)
-    elseif mode == "VERSION" then
+    if AnimationIdMode == "VERSION_COVER" then
         local length = math.random(1, 15)
         local digits = {tostring(math.random(1, 9))}
         for i = 2, length do
@@ -9081,6 +9072,7 @@ function BuildEmoteAnimationId(numericId)
         end
         return "http://www.roblox.com/asset/?version=" .. table.concat(digits) .. "&id=" .. tostring(numericId)
     end
+
     return "http" .. HttpService:GenerateGUID() .. "=" .. tostring(numericId)
 end
 
@@ -9160,8 +9152,14 @@ local function LoadSettings()
         ContinueEmoteStopKey = Enum.KeyCode[data.ContinueEmoteStopKey]
     end
     InterfaceScale = tonumber(data.InterfaceScale) or InterfaceScale
-    if type(data.AnimationIdMode) == "string" and (data.AnimationIdMode == "GUID" or data.AnimationIdMode == "VERSION" or data.AnimationIdMode == "RBXASSETID" or data.AnimationIdMode == "GUID_COVER" or data.AnimationIdMode == "VERSION_COVER") then
-        AnimationIdMode = data.AnimationIdMode
+    if data.AnimationIdMode == "VERSION_COVER" then
+        AnimationIdMode = "VERSION_COVER"
+    elseif data.AnimationIdMode == "GUID_COVER" then
+        AnimationIdMode = "GUID_COVER"
+    elseif data.AnimationIdMode == "VERSION" then
+        AnimationIdMode = "VERSION_COVER"
+    else
+        AnimationIdMode = "GUID_COVER"
     end
     if data.MusicEnabled ~= nil then NoMusicEnabled = not (data.MusicEnabled == true) end
     if data.CommandStatusBarEnabled ~= nil then CommandStatusBarEnabled = data.CommandStatusBarEnabled == true end
@@ -9783,23 +9781,21 @@ AnimationIdModeBtn.Font = Enum.Font.SourceSansSemibold
 AnimationIdModeBtn.TextSize = 9
 AnimationIdModeBtn.TextColor3 = Color3.fromRGB(255,255,255)
 AnimationIdModeBtn.TextXAlignment = Enum.TextXAlignment.Left
-AnimationIdModeBtn.Text = "ANIMATION ID FORMAT    " .. AnimationIdMode
+local function UpdateAnimationIdModeButton()
+    local label = AnimationIdMode == "VERSION_COVER" and "VERSION COVER" or "GUID COVER"
+    AnimationIdModeBtn.Text = "ANIMATION ID FORMAT    " .. label
+end
+UpdateAnimationIdModeButton()
 AnimationIdModeBtn.ZIndex = 62
 AnimationIdModeBtn.Parent = SettingsScroll
 Instance.new("UICorner", AnimationIdModeBtn).CornerRadius = UDim.new(0,6)
 AnimationIdModeBtn.Activated:Connect(function()
-    if AnimationIdMode == "GUID" then
-        AnimationIdMode = "VERSION"
-    elseif AnimationIdMode == "VERSION" then
-        AnimationIdMode = "RBXASSETID"
-    elseif AnimationIdMode == "RBXASSETID" then
-        AnimationIdMode = "GUID_COVER"
-    elseif AnimationIdMode == "GUID_COVER" then
+    if AnimationIdMode == "GUID_COVER" then
         AnimationIdMode = "VERSION_COVER"
     else
-        AnimationIdMode = "GUID"
+        AnimationIdMode = "GUID_COVER"
     end
-    AnimationIdModeBtn.Text = "ANIMATION ID FORMAT    " .. AnimationIdMode
+    UpdateAnimationIdModeButton()
     SaveSettings()
 end)
 y += 40
