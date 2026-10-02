@@ -1,0 +1,124 @@
+local Players = game:GetService("Players")
+local Player = Players.LocalPlayer
+local Backpack = Player:WaitForChild("Backpack")
+local Tool = Instance.new("Tool")
+Tool.Name = "Decapitate Head"
+Tool.RequiresHandle = false
+Tool.CanBeDropped = false
+Tool.Parent = Backpack
+
+local AnimationsGroup1 = {
+	{
+		Id = "rbxassetid://35154961",
+		Layer = 1,
+		TimePosition = 3.2,
+		Speed = 0
+	},
+	{
+		Id = "rbxassetid://313735596",
+		Layer = 3,
+		TimePosition = 0,
+		Speed = 1
+	},
+	{
+		Id = "rbxassetid://206851098",
+		Layer = 2,
+		TimePosition = 0.5,
+		Speed = 0
+	}
+}
+
+local AnimationsGroup2 = {
+	{
+		Id = "http://www.roblox.com/asset/?version=1&id=94861246",
+		Layer = 2,
+		TimePosition = 1,
+		Speed = 0
+	},
+	{
+		Id = "http://www.roblox.com/asset/?version=1&id=121572214",
+		Layer = 3,
+		TimePosition = 1,
+		Speed = 0
+	}
+}
+
+local PriorityLayers = {
+	Enum.AnimationPriority.Core,
+	Enum.AnimationPriority.Idle,
+	Enum.AnimationPriority.Movement,
+	Enum.AnimationPriority.Action,
+	Enum.AnimationPriority.Action2,
+	Enum.AnimationPriority.Action3,
+	Enum.AnimationPriority.Action4
+}
+
+local Tracks = {}
+local isGroup2Active = false
+local lastActivation = 0
+local cooldown = 0.33
+
+local function StopAnimations()
+	for _, Track in ipairs(Tracks) do
+		if Track then
+			Track:Stop(0.05)
+			Track:Destroy()
+		end
+	end
+	table.clear(Tracks)
+end
+
+local function PlayAnimations(animList)
+	StopAnimations()
+	local Character = Player.Character or Player.CharacterAdded:Wait()
+	local Humanoid = Character:FindFirstChildOfClass("Humanoid")
+	if not Humanoid or Humanoid.Health <= 0 then
+		return
+	end
+	
+	local Animator = Humanoid:FindFirstChildOfClass("Animator")
+	if not Animator then
+		Animator = Instance.new("Animator")
+		Animator.Parent = Humanoid
+	end
+	
+	for _, Data in ipairs(animList) do
+		local Animation = Instance.new("Animation")
+		Animation.AnimationId = Data.Id
+		local Track = Animator:LoadAnimation(Animation)
+		Track.Priority = PriorityLayers[math.clamp(Data.Layer, 1, #PriorityLayers)]
+		Track:Play(0.05)
+		Track.TimePosition = Data.TimePosition
+		Track:AdjustSpeed(Data.Speed)
+		table.insert(Tracks, Track)
+		Animation:Destroy()
+	end
+end
+
+Tool.Equipped:Connect(function()
+	isGroup2Active = false
+	PlayAnimations(AnimationsGroup1)
+end)
+
+Tool.Activated:Connect(function()
+	local currentTime = tick()
+	if currentTime - lastActivation < cooldown then
+		return
+	end
+	lastActivation = currentTime
+
+	isGroup2Active = not isGroup2Active
+	if isGroup2Active then
+		PlayAnimations(AnimationsGroup2)
+	else
+		PlayAnimations(AnimationsGroup1)
+	end
+end)
+
+Tool.Unequipped:Connect(function()
+	StopAnimations()
+end)
+
+Player.CharacterAdded:Connect(function()
+	StopAnimations()
+end)
