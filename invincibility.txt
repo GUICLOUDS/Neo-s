@@ -1,0 +1,200 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local OldGui = PlayerGui:FindFirstChild("GodModeGUI")
+if OldGui then
+OldGui:Destroy()
+end
+
+local OldVoidFloor = workspace:FindFirstChild("GodModeVoidFloor")
+if OldVoidFloor then
+OldVoidFloor:Destroy()
+end
+
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "GodModeGUI"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = PlayerGui
+
+local Frame = Instance.new("Frame")
+Frame.Name = "MainFrame"
+Frame.Size = UDim2.new(0, 160, 0, 45)
+Frame.Position = UDim2.new(0, 10, 0.100000031, -40)
+Frame.BackgroundColor3 = Color3.fromRGB(10, 10, 10)
+Frame.BorderSizePixel = 0
+Frame.Active = true
+Frame.Draggable = true
+Frame.Parent = ScreenGui
+
+local FrameCorner = Instance.new("UICorner")
+FrameCorner.CornerRadius = UDim.new(0, 7)
+FrameCorner.Parent = Frame
+
+local Button = Instance.new("TextButton")
+Button.Name = "GodModeButton"
+Button.Size = UDim2.new(1, -8, 1, -8)
+Button.Position = UDim2.new(0, 4, 0, 4)
+Button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+Button.BorderSizePixel = 0
+Button.Text = "GOD MODE: OFF"
+Button.TextColor3 = Color3.fromRGB(255, 255, 255)
+Button.TextScaled = true
+Button.Font = Enum.Font.SourceSansBold
+Button.Parent = Frame
+
+local ButtonCorner = Instance.new("UICorner")
+ButtonCorner.CornerRadius = UDim.new(0, 5)
+ButtonCorner.Parent = Button
+
+local godMode = false
+local connection = nil
+local voidConnection = nil
+local modifiedParts = {}
+local VoidFloor = nil
+
+local function restoreParts()
+for part, originalValue in pairs(modifiedParts) do
+if part and part.Parent and part:IsA("BasePart") then
+part.CanTouch = originalValue
+end
+end
+
+table.clear(modifiedParts)
+end
+
+local function createVoidFloor()
+if VoidFloor and VoidFloor.Parent then
+return
+end
+
+VoidFloor = Instance.new("Part")
+VoidFloor.Name = "GodModeVoidFloor"
+VoidFloor.Size = Vector3.new(1000, 1, 1000)
+VoidFloor.Position = Vector3.new(0, -50, 0)
+VoidFloor.Anchored = true
+VoidFloor.CanCollide = true
+VoidFloor.CanTouch = false
+VoidFloor.CanQuery = false
+VoidFloor.Transparency = 1
+VoidFloor.Parent = workspace
+
+voidConnection = RunService.Heartbeat:Connect(function()
+if not godMode then
+return
+end
+
+if not VoidFloor or not VoidFloor.Parent then
+return
+end
+
+local character = LocalPlayer.Character
+if not character then
+return
+end
+
+local root = character:FindFirstChild("HumanoidRootPart")
+if not root then
+return
+end
+
+VoidFloor.Position = Vector3.new(root.Position.X, -50, root.Position.Z)
+end)
+end
+
+local function removeVoidFloor()
+if voidConnection then
+voidConnection:Disconnect()
+voidConnection = nil
+end
+
+if VoidFloor then
+VoidFloor:Destroy()
+VoidFloor = nil
+end
+
+local ExistingVoidFloor = workspace:FindFirstChild("GodModeVoidFloor")
+if ExistingVoidFloor then
+ExistingVoidFloor:Destroy()
+end
+end
+
+local function disableGodMode()
+godMode = false
+
+if connection then
+connection:Disconnect()
+connection = nil
+end
+
+restoreParts()
+removeVoidFloor()
+
+if Button and Button.Parent then
+Button.Text = "GOD MODE: OFF"
+Button.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+end
+end
+
+local function enableGodMode()
+godMode = true
+
+Button.Text = "GOD MODE: ON"
+Button.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+
+createVoidFloor()
+
+connection = RunService.Heartbeat:Connect(function()
+if not godMode then
+return
+end
+
+local character = LocalPlayer.Character
+if not character then
+return
+end
+
+local root = character:FindFirstChild("HumanoidRootPart")
+if not root then
+return
+end
+
+for _, part in ipairs(workspace:GetPartBoundsInRadius(root.Position, 10)) do
+if part:IsA("BasePart") then
+if modifiedParts[part] == nil then
+modifiedParts[part] = part.CanTouch
+end
+
+part.CanTouch = false
+end
+end
+end)
+end
+
+Button.MouseButton1Click:Connect(function()
+if godMode then
+disableGodMode()
+else
+enableGodMode()
+end
+end)
+
+local character = LocalPlayer.Character
+if character then
+local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+if humanoid then
+humanoid.Died:Connect(function()
+disableGodMode()
+
+local GodModeGUI = LocalPlayer.PlayerGui:FindFirstChild("GodModeGUI")
+if GodModeGUI then
+GodModeGUI:Destroy()
+end
+
+removeVoidFloor()
+end)
+end
+end

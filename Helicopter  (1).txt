@@ -1,0 +1,442 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
+local lp = Players.LocalPlayer
+local c = lp.Character or lp.CharacterAdded:Wait()
+c.Archivable = true
+local humanoid = c:WaitForChild("Humanoid")
+
+local Settings = {
+FacingAngle = -math.pi / -2,
+BaseTiltOffset = -math.pi / 2,
+YawSpeed = 10,
+MaxTilt = 0.3,
+Stiffness = 35,
+Damping = 3.5,
+PivotOffset = Vector3.new(0, 1.5, 0),
+CameraHeight = 0.6,
+}
+
+local PLAYER_GROUP = "RealPlayerGroup"
+local CLONE_GROUP = "CloneVisualGroup"
+
+pcall(function()
+PhysicsService:RegisterCollisionGroup(PLAYER_GROUP)
+PhysicsService:RegisterCollisionGroup(CLONE_GROUP)
+PhysicsService:CollisionGroupSetCollidable(PLAYER_GROUP, CLONE_GROUP, false)
+end)
+
+local hrp0 = c:WaitForChild("HumanoidRootPart")
+local hrp1 = hrp0:Clone()
+c.Parent = nil
+hrp0.Parent = hrp1
+if hrp0:FindFirstChild("RootJoint") then
+hrp0.RootJoint.Part0 = nil
+end
+hrp1.Parent = c
+c.Parent = workspace
+
+local clone = c:Clone()
+c.Archivable = false
+clone.Name = lp.Name .. "_Clone"
+clone.Parent = c
+
+local cloneRoot = clone:WaitForChild("HumanoidRootPart")
+local cloneHumanoid = clone:WaitForChild("Humanoid")
+cloneHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+cloneHumanoid.AutoRotate = false
+cloneHumanoid.PlatformStand = true
+
+for _, part in ipairs(c:GetDescendants()) do
+if part:IsA("BasePart") then
+part.Transparency = 1
+pcall(function() part.CollisionGroup = PLAYER_GROUP end)
+elseif part:IsA("Decal") then
+part.Transparency = 1
+elseif part:IsA("Accoutrement") or part:IsA("Accessory") then
+local handle = part:FindFirstChild("Handle")
+if handle and handle:IsA("BasePart") then
+handle.Transparency = 1
+pcall(function() handle.CollisionGroup = PLAYER_GROUP end)
+end
+end
+end
+
+local partPairs = {}
+local cloneParts = {}
+for _, object in ipairs(clone:GetDescendants()) do
+if object:IsA("Script") or object:IsA("LocalScript") then
+object:Destroy()
+elseif object:IsA("Motor6D") then
+object:Destroy()
+elseif object:IsA("BasePart") then
+object.CanCollide = false
+object.CanTouch = false
+object.CanQuery = false
+object.Massless = true
+object.Anchored = true
+pcall(function() object.CollisionGroup = CLONE_GROUP end)
+table.insert(cloneParts, object)
+if object.Name == "HumanoidRootPart" then
+object.Transparency = 1
+else
+object.Transparency = 0
+local realPart = c:FindFirstChild(object.Name, true)
+if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
+table.insert(partPairs, {real = realPart, clone = object})
+end
+end
+elseif object:IsA("Decal") then
+object.Transparency = 0
+end
+end
+
+local camera = workspace.CurrentCamera
+hrp0.Transparency = 1
+
+local camAnchor = Instance.new("Part")
+camAnchor.Name = "CameraAnchor"
+camAnchor.Size = Vector3.new(0.1, 0.1, 0.1)
+camAnchor.Transparency = 1
+camAnchor.CanCollide = false
+camAnchor.Massless = true
+camAnchor.CFrame = hrp0.CFrame * CFrame.new(0, Settings.CameraHeight, 0)
+camAnchor.Parent = c
+
+local weld = Instance.new("WeldConstraint")
+weld.Part0 = hrp0
+weld.Part1 = camAnchor
+weld.Parent = camAnchor
+camera.CameraSubject = camAnchor
+
+local currentAngleX = 0
+local currentAngleZ = 0
+local velocityX = 0
+local velocityZ = 0
+local currentYaw = Settings.FacingAngle
+
+local targetYOffset = 2.5
+local currentYOffset = 2.5
+local normalWalkSpeed = 16
+local boostedWalkSpeed = 28
+local isBoosted = false
+
+local isHoldingUp = false
+local isHoldingDown = false
+local holdSpeedIncrement = 3.5
+
+local isBarrelRolling = false
+local barrelRollAngle = 0
+local barrelRollOffsetY = 0
+local barrelRollOffsetZ = 0
+local lastBarrelRollTime = 0
+local barrelRollCooldown = 10
+
+local aliveTime = 0
+local aliveBounceY = 0
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "FrameGui"
+gui.ResetOnSpawn = false
+gui.Parent = lp:WaitForChild("PlayerGui")
+
+humanoid.Died:Connect(function()
+if gui then
+gui:Destroy()
+end
+end)
+
+local function applyModernStyle(btn, cornerRadius)
+btn.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+btn.BorderSizePixel = 0
+btn.TextColor3 = Color3.fromRGB(240, 240, 245)
+btn.TextScaled = true
+btn.Font = Enum.Font.GothamMedium
+
+local stroke = Instance.new("UIStroke")
+stroke.Color = Color3.fromRGB(60, 60, 70)
+stroke.Thickness = 1.5
+stroke.Parent = btn
+
+local corner = Instance.new("UICorner")
+corner.CornerRadius = UDim.new(0, cornerRadius or 8)
+corner.Parent = btn
+
+local padding = Instance.new("UIPadding")
+padding.PaddingTop = UDim.new(0, 8)
+padding.PaddingBottom = UDim.new(0, 8)
+padding.PaddingLeft = UDim.new(0, 8)
+padding.PaddingRight = UDim.new(0, 8)
+padding.Parent = btn
+end
+
+local upButton = Instance.new("TextButton")
+upButton.Name = "UpButton"
+upButton.Size = UDim2.new(0, 50, 0, 50)
+upButton.Position = UDim2.new(0.5, 155, 0.5, -220)
+upButton.Text = "^"
+upButton.Parent = gui
+applyModernStyle(upButton, 10)
+
+local downButton = Instance.new("TextButton")
+downButton.Name = "DownButton"
+downButton.Size = UDim2.new(0, 50, 0, 50)
+downButton.Position = UDim2.new(0.5, 210, 0.5, -220)
+downButton.Text = "v"
+downButton.Parent = gui
+applyModernStyle(downButton, 10)
+
+local landButton = Instance.new("TextButton")
+landButton.Name = "LandButton"
+landButton.Size = UDim2.new(0, 60, 0, 50)
+landButton.Position = UDim2.new(0.5, 270, 0.5, -220)
+landButton.Text = "Land"
+landButton.Parent = gui
+applyModernStyle(landButton, 10)
+
+local hoverButton = Instance.new("TextButton")
+hoverButton.Name = "HoverButton"
+hoverButton.Size = UDim2.new(0, 60, 0, 50)
+hoverButton.Position = UDim2.new(0.5, 270, 0.5, -160)
+hoverButton.Text = "Hover"
+hoverButton.Parent = gui
+applyModernStyle(hoverButton, 10)
+
+local speedUpButton = Instance.new("TextButton")
+speedUpButton.Name = "SpeedUpButton"
+speedUpButton.Size = UDim2.new(0, 60, 0, 50)
+speedUpButton.Position = UDim2.new(0.5, 270, 0.5, -100)
+speedUpButton.Text = "Speed Up"
+speedUpButton.Parent = gui
+applyModernStyle(speedUpButton, 10)
+
+local barrelRollButton = Instance.new("TextButton")
+barrelRollButton.Name = "BarrelRollButton"
+barrelRollButton.Size = UDim2.new(0, 60, 0, 50)
+barrelRollButton.Position = UDim2.new(0.5, 270, 0.5, -40)
+barrelRollButton.Text = "Barrel Roll"
+barrelRollButton.Parent = gui
+applyModernStyle(barrelRollButton, 10)
+
+upButton.MouseButton1Down:Connect(function()
+if targetYOffset == -2.5 then return end
+isHoldingUp = true
+targetYOffset = math.clamp(targetYOffset + 0.3, 0.5, 8.0)
+end)
+upButton.MouseButton1Up:Connect(function() isHoldingUp = false end)
+upButton.MouseLeave:Connect(function() isHoldingUp = false end)
+
+downButton.MouseButton1Down:Connect(function()
+if targetYOffset == -2.5 then return end
+isHoldingDown = true
+targetYOffset = math.clamp(targetYOffset - 0.3, 0.5, 8.0)
+end)
+downButton.MouseButton1Up:Connect(function() isHoldingDown = false end)
+downButton.MouseLeave:Connect(function() isHoldingDown = false end)
+
+landButton.MouseButton1Click:Connect(function()
+targetYOffset = -2.5
+isBoosted = false
+isHoldingUp = false
+isHoldingDown = false
+humanoid.WalkSpeed = 0
+end)
+
+hoverButton.MouseButton1Click:Connect(function()
+targetYOffset = 2.5
+isBoosted = false
+task.delay(0.5, function()
+if targetYOffset ~= -2.5 then
+humanoid.WalkSpeed = normalWalkSpeed
+end
+end)
+end)
+
+speedUpButton.MouseButton1Click:Connect(function()
+if targetYOffset ~= -2.5 then
+isBoosted = not isBoosted
+if isBoosted then
+humanoid.WalkSpeed = boostedWalkSpeed
+else
+humanoid.WalkSpeed = normalWalkSpeed
+end
+end
+end)
+
+barrelRollButton.MouseButton1Click:Connect(function()
+if targetYOffset == 2.5 and not isBarrelRolling then
+local currentTime = tick()
+if currentTime - lastBarrelRollTime >= barrelRollCooldown then
+lastBarrelRollTime = currentTime
+isBarrelRolling = true
+
+task.spawn(function()
+local duration = 1.1
+local elapsed = 0
+while elapsed < duration do
+local dt = RunService.Heartbeat:Wait()
+elapsed = elapsed + dt
+local alpha = math.clamp(elapsed / duration, 0, 1)
+
+barrelRollAngle = alpha * (math.pi * 2)
+barrelRollOffsetY = math.sin(alpha * math.pi * 2) * 1.2
+barrelRollOffsetZ = math.cos(alpha * math.pi) * 0.8
+end
+barrelRollAngle = 0
+barrelRollOffsetY = 0
+barrelRollOffsetZ = 0
+isBarrelRolling = false
+end)
+end
+end
+end)
+
+RunService.Heartbeat:Connect(function(dt)
+if not c or not c.Parent or not hrp0 or not hrp1 or not clone or not clone.Parent then return end
+
+for _, part in ipairs(cloneParts) do
+part.CanCollide = false
+part.CanTouch = false
+part.CanQuery = false
+end
+
+if targetYOffset ~= -2.5 then
+if isHoldingUp then
+targetYOffset = math.clamp(targetYOffset + holdSpeedIncrement * dt, 0.5, 8.0)
+elseif isHoldingDown then
+targetYOffset = math.clamp(targetYOffset - holdSpeedIncrement * dt, 0.5, 8.0)
+end
+end
+
+currentYOffset = currentYOffset + (targetYOffset - currentYOffset) * math.clamp(5 * dt, 0, 1)
+
+local moveVel = hrp1.CFrame:VectorToObjectSpace(hrp1.AssemblyLinearVelocity)
+
+if targetYOffset ~= -2.5 then
+if moveVel.Magnitude > 1 then
+aliveTime = aliveTime + dt * 10
+aliveBounceY = math.sin(aliveTime) * 0.25
+else
+aliveTime = aliveTime + dt * 3
+aliveBounceY = math.sin(aliveTime) * 0.15
+end
+else
+aliveBounceY = 0
+aliveTime = 0
+end
+
+local targetAngleX = math.clamp(moveVel.X * 0.03 + (moveVel.Y * 0.015), -Settings.MaxTilt, Settings.MaxTilt)
+local targetAngleZ = math.clamp(moveVel.Z * 0.03 + (moveVel.Y * 0.015), -Settings.MaxTilt, Settings.MaxTilt)
+
+local visualCFrame = hrp1.CFrame * CFrame.Angles(0, currentYaw, 0)
+local characterLook = visualCFrame.LookVector
+local characterRight = visualCFrame.RightVector
+local upVector = Vector3.new(0, 1, 0)
+local gravityPitch = characterLook:Dot(upVector)
+local gravityRoll = characterRight:Dot(upVector)
+
+targetAngleX = math.clamp(targetAngleX - (gravityPitch * 1.5), -Settings.MaxTilt, Settings.MaxTilt)
+targetAngleZ = math.clamp(targetAngleZ + (gravityRoll * 1.5), -Settings.MaxTilt, Settings.MaxTilt)
+
+local forceX = (targetAngleX - currentAngleX) * Settings.Stiffness
+velocityX = (velocityX + forceX * dt) * math.clamp(1 - (Settings.Damping * dt), 0, 1)
+currentAngleX = currentAngleX + velocityX * dt
+
+local forceZ = (targetAngleZ - currentAngleZ) * Settings.Stiffness
+velocityZ = (velocityZ + forceZ * dt) * math.clamp(1 - (Settings.Damping * dt), 0, 1)
+currentAngleZ = currentAngleZ + velocityZ * dt
+
+local targetYaw = Settings.FacingAngle
+currentYaw = currentYaw + (targetYaw - currentYaw) * math.clamp(Settings.YawSpeed * dt, 0, 1)
+
+local baseCFrame = hrp1.CFrame * CFrame.Angles(0, currentYaw, 0) * CFrame.new(0, currentYOffset + barrelRollOffsetY + aliveBounceY, barrelRollOffsetZ)
+local pivotCFrame = baseCFrame * CFrame.new(Settings.PivotOffset)
+local tiltRotation = CFrame.Angles(currentAngleX + barrelRollAngle, 0, Settings.BaseTiltOffset + currentAngleZ)
+local calculatedCFrame = pivotCFrame * tiltRotation * CFrame.new(-Settings.PivotOffset)
+
+hrp0.CFrame = calculatedCFrame
+hrp0.AssemblyLinearVelocity = hrp1.AssemblyLinearVelocity
+cloneRoot.CFrame = calculatedCFrame
+
+local realRootCFrame = hrp1.CFrame
+for _, pair in ipairs(partPairs) do
+local offsetFromRealRoot = realRootCFrame:ToObjectSpace(pair.real.CFrame)
+pair.clone.CFrame = calculatedCFrame * offsetFromRealRoot
+end
+end)
+
+Wait(0.1)
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+
+local PriorityLayers = {
+Enum.AnimationPriority.Core,
+Enum.AnimationPriority.Idle,
+Enum.AnimationPriority.Movement,
+Enum.AnimationPriority.Action,
+Enum.AnimationPriority.Action2,
+Enum.AnimationPriority.Action3,
+Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layer)
+layer = math.clamp(layer, 1, #PriorityLayers)
+track.Priority = PriorityLayers[layer]
+end
+
+local animations = {
+{
+id = "259438880",
+layer = 3,
+fadeTime = 0.25,
+speed = 3,
+timePosition = 0
+},
+{
+id = "148831127",
+layer = 4,
+fadeTime = 0,
+speed = 0,
+timePosition = 0
+},
+{
+id = "88016955",
+layer = 5,
+fadeTime = 0.5,
+speed = 1,
+timePosition = 0
+},
+{
+id = "248335946",
+layer = 2,
+fadeTime = 0.5,
+speed = 0,
+timePosition = 0.8
+}
+}
+
+local tracks = {}
+
+for _, data in ipairs(animations) do
+local animation = Instance.new("Animation")
+animation.AnimationId = "rbxassetid://" .. data.id
+
+local track = humanoid:LoadAnimation(animation)
+SetLayer(track, data.layer)
+
+track.Looped = true
+track:Play(data.fadeTime)
+track.TimePosition = data.timePosition
+track:AdjustSpeed(data.speed)
+
+table.insert(tracks, track)
+end
+
+humanoid.Died:Connect(function()
+for _, track in ipairs(tracks) do
+if track.IsPlaying then
+track:Stop(0)
+end
+end
+end)

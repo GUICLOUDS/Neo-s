@@ -1,0 +1,252 @@
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
+local lp = Players.LocalPlayer
+local c = lp.Character or lp.CharacterAdded:Wait()
+c.Archivable = true
+local PLAYER_GROUP = "RealPlayerGroup"
+local CLONE_GROUP = "CloneVisualGroup"
+pcall(function()
+PhysicsService:RegisterCollisionGroup(PLAYER_GROUP)
+PhysicsService:RegisterCollisionGroup(CLONE_GROUP)
+PhysicsService:CollisionGroupSetCollidable(PLAYER_GROUP, CLONE_GROUP, false)
+end)
+local hrp0 = c:WaitForChild("HumanoidRootPart")
+local hrp1 = hrp0:Clone()
+c.Parent = nil
+hrp0.Parent = hrp1
+if hrp0:FindFirstChild("RootJoint") then
+hrp0.RootJoint.Part0 = nil
+end
+hrp1.Parent = c
+c.Parent = workspace
+local clone = c:Clone()
+c.Archivable = false
+clone.Name = lp.Name .. "_Clone"
+clone.Parent = c
+local cloneRoot = clone:WaitForChild("HumanoidRootPart")
+local cloneHumanoid = clone:WaitForChild("Humanoid")
+cloneHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+cloneHumanoid.AutoRotate = false
+cloneHumanoid.PlatformStand = true
+for _, part in ipairs(c:GetDescendants()) do
+if part:IsA("BasePart") then
+part.Transparency = 1
+pcall(function() part.CollisionGroup = PLAYER_GROUP end)
+elseif part:IsA("Decal") then
+part.Transparency = 1
+elseif part:IsA("Accoutrement") or part:IsA("Accessory") then
+local handle = part:FindFirstChild("Handle")
+if handle and handle:IsA("BasePart") then
+handle.Transparency = 1
+pcall(function() handle.CollisionGroup = PLAYER_GROUP end)
+end
+end
+end
+local partPairs = {}
+local cloneParts = {}
+for _, object in ipairs(clone:GetDescendants()) do
+if object:IsA("Script") or object:IsA("LocalScript") then
+object:Destroy()
+elseif object:IsA("Motor6D") then
+object:Destroy()
+elseif object:IsA("BasePart") then
+object.CanCollide = false
+object.CanTouch = false
+object.CanQuery = false
+object.Massless = true
+object.Anchored = true
+pcall(function() object.CollisionGroup = CLONE_GROUP end)
+table.insert(cloneParts, object)
+if object.Name == "HumanoidRootPart" then
+object.Transparency = 1
+else
+object.Transparency = 0
+local realPart = c:FindFirstChild(object.Name, true)
+if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
+table.insert(partPairs, {real = realPart, clone = object})
+end
+end
+elseif object:IsA("Decal") then
+object.Transparency = 0
+end
+end
+local camera = workspace.CurrentCamera
+hrp0.Transparency = 1
+local stiffness = 35
+local damping = 3.5
+local maxTilt = 0.3
+local pivotOffset = Vector3.new(0, 1.5, 0)
+local yOffset = -2.8
+local cameraHeight = 0.6
+local camAnchor = Instance.new("Part")
+camAnchor.Name = "CameraAnchor"
+camAnchor.Size = Vector3.new(0.1, 0.1, 0.1)
+camAnchor.Transparency = 1
+camAnchor.CanCollide = false
+camAnchor.Massless = true
+camAnchor.CFrame = hrp0.CFrame * CFrame.new(0, cameraHeight, 0)
+camAnchor.Parent = c
+local weld = Instance.new("WeldConstraint")
+weld.Part0 = hrp0
+weld.Part1 = camAnchor
+weld.Parent = camAnchor
+camera.CameraSubject = camAnchor
+
+local raycastParams = RaycastParams.new()
+raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+raycastParams.IgnoreWater = true
+
+local currentAngleX = math.rad(-100)
+local currentAngleZ = 0
+local velocityX = 0
+local velocityZ = 0
+
+RunService.Heartbeat:Connect(function(dt)
+if not c or not c.Parent or not hrp0 or not hrp1 or not clone or not clone.Parent then return end
+for _, part in ipairs(cloneParts) do
+part.CanCollide = false
+part.CanTouch = false
+part.CanQuery = false
+end
+
+raycastParams.FilterDescendantsInstances = {c, clone}
+local rayDist = 3.0
+local originPos = hrp1.Position
+local lookDir = hrp1.CFrame.LookVector
+local rightDir = hrp1.CFrame.RightVector
+
+local forwardRay = workspace:Raycast(originPos, lookDir * rayDist, raycastParams)
+local backwardRay = workspace:Raycast(originPos, -lookDir * rayDist, raycastParams)
+local rightRay = workspace:Raycast(originPos, rightDir * rayDist, raycastParams)
+local leftRay = workspace:Raycast(originPos, -rightDir * rayDist, raycastParams)
+
+local wallTiltX = 0
+local wallTiltZ = 0
+
+if forwardRay then
+local alpha = 1 - (forwardRay.Distance / rayDist)
+wallTiltX = wallTiltX + (alpha * 0.8)
+end
+if backwardRay then
+local alpha = 1 - (backwardRay.Distance / rayDist)
+wallTiltX = wallTiltX - (alpha * 0.8)
+end
+if rightRay then
+local alpha = 1 - (rightRay.Distance / rayDist)
+wallTiltZ = wallTiltZ + (alpha * 0.8)
+end
+if leftRay then
+local alpha = 1 - (leftRay.Distance / rayDist)
+wallTiltZ = wallTiltZ - (alpha * 0.8)
+end
+
+local moveVel = hrp1.CFrame:VectorToObjectSpace(hrp1.AssemblyLinearVelocity)
+local movementTiltX = math.clamp(moveVel.Z * 0.03 + (moveVel.Y * 0.015), -maxTilt, maxTilt)
+local movementTiltZ = math.clamp(-moveVel.X * 0.03, -maxTilt, maxTilt)
+local characterLook = hrp1.CFrame.LookVector
+local characterRight = hrp1.CFrame.RightVector
+local upVector = Vector3.new(0, 1, 0)
+local gravityPitch = characterLook:Dot(upVector)
+local gravityRoll = characterRight:Dot(upVector)
+movementTiltX = math.clamp(movementTiltX - (gravityPitch * 1.5), -maxTilt, maxTilt)
+movementTiltZ = math.clamp(movementTiltZ + (gravityRoll * 1.5), -maxTilt, maxTilt)
+
+local targetAngleX = math.rad(-100) - movementTiltX + wallTiltX
+local targetAngleZ = movementTiltZ + wallTiltZ
+
+local forceX = (targetAngleX - currentAngleX) * stiffness
+velocityX = (velocityX + forceX * dt) * math.clamp(1 - (damping * dt), 0, 1)
+currentAngleX = currentAngleX + velocityX * dt
+local forceZ = (targetAngleZ - currentAngleZ) * stiffness
+velocityZ = (velocityZ + forceZ * dt) * math.clamp(1 - (damping * dt), 0, 1)
+currentAngleZ = currentAngleZ + velocityZ * dt
+local baseCFrame = hrp1.CFrame * CFrame.new(0, yOffset, 0)
+local pivotCFrame = baseCFrame * CFrame.new(pivotOffset)
+local tiltRotation = CFrame.Angles(currentAngleX, 0, currentAngleZ)
+local calculatedCFrame = pivotCFrame * tiltRotation * CFrame.new(-pivotOffset)
+hrp0.CFrame = calculatedCFrame
+hrp0.AssemblyLinearVelocity = hrp1.AssemblyLinearVelocity
+cloneRoot.CFrame = calculatedCFrame
+local realRootCFrame = hrp1.CFrame
+for _, pair in ipairs(partPairs) do
+local offsetFromRealRoot = realRootCFrame:ToObjectSpace(pair.real.CFrame)
+pair.clone.CFrame = calculatedCFrame * offsetFromRealRoot
+end
+end)
+Wait(0.05)
+local player = game.Players.LocalPlayer
+local character = player.Character or player.CharacterAdded:Wait()
+local humanoid = character:WaitForChild("Humanoid")
+local rootPart = character:WaitForChild("HumanoidRootPart")
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layer)
+    layer = math.clamp(layer, 1, #PriorityLayers)
+    track.Priority = PriorityLayers[layer]
+end
+
+local function loadAnimation(assetId, layerNum, speed)
+    local animation = Instance.new("Animation")
+    animation.AnimationId = "rbxassetid://" .. assetId
+    
+    local track = humanoid:LoadAnimation(animation)
+    SetLayer(track, layerNum)
+    track.Looped = true
+    track:Play(0.5)
+    track:AdjustSpeed(speed)
+    
+    return track
+end
+local anim1Track = loadAnimation("161235826", 3, 0.7)
+local airborneTime = 0
+local wasMovingWhenJumped = false
+local wasGrounded = true
+
+task.spawn(function()
+    while character and humanoid.Health > 0 do
+        local horizontalVelocity = Vector3.new(rootPart.AssemblyLinearVelocity.X, 0, rootPart.AssemblyLinearVelocity.Z)
+        local isMoving = horizontalVelocity.Magnitude > 0.5
+        local isGrounded = humanoid.FloorMaterial ~= Enum.Material.Air
+        if wasGrounded and not isGrounded then
+            wasMovingWhenJumped = isMoving
+        end
+        wasGrounded = isGrounded
+
+        if isGrounded then
+            airborneTime = 0
+            if isMoving then
+                anim1Track:AdjustSpeed(0.7)
+            else
+                anim1Track:AdjustSpeed(0)
+            end
+        else
+            if wasMovingWhenJumped then
+                airborneTime = airborneTime + 0.1
+                local slowedSpeed = math.max(0, 0.7 - (airborneTime * 0.3))
+                anim1Track:AdjustSpeed(slowedSpeed)
+            else
+                anim1Track:AdjustSpeed(0)
+            end
+        end
+        
+        task.wait(0.1)
+    end
+end)
+
+
+local anim2Track = loadAnimation("68339848", 4, 1)
+local anim3Track = loadAnimation("179224234", 3, 1)
+humanoid.Died:Connect(function()
+    anim1Track:Stop(0.5)
+    anim2Track:Stop(0.5)
+    anim3Track:Stop(0.5)
+end)
