@@ -30,6 +30,176 @@ local jiggleRot = Vector3.zero
 local jiggleVel = Vector3.zero
 local lastTargetRot = CFrame.identity
 
+local ActiveDummy = nil
+local dummyAnimationTracks = {}
+local attachmentStartCFrame = nil
+
+local function setPhysicsRepRoot(instance, value)
+    if sethiddenproperty then
+        return pcall(function()
+            sethiddenproperty(instance, "PhysicsRepRootPart", value)
+        end)
+    end
+
+    if setscriptable then
+        local ok = pcall(function()
+            setscriptable(instance, "PhysicsRepRootPart", true)
+            instance.PhysicsRepRootPart = value
+            setscriptable(instance, "PhysicsRepRootPart", false)
+        end)
+        return ok
+    end
+
+    return false
+end
+
+local function destroyDummy()
+    for track in pairs(dummyAnimationTracks) do
+        pcall(function()
+            track:Stop(0)
+            track:Destroy()
+        end)
+    end
+    table.clear(dummyAnimationTracks)
+
+    if ActiveDummy then
+        pcall(function()
+            ActiveDummy:Destroy()
+        end)
+        ActiveDummy = nil
+    end
+end
+
+local function createDummy(humanoid)
+    destroyDummy()
+
+    local description
+    local success = pcall(function()
+        description = humanoid:GetAppliedDescription()
+    end)
+
+    if not success or not description then
+        description = Instance.new("HumanoidDescription")
+    end
+
+    local dummySuccess, dummy = pcall(function()
+        return Players:CreateHumanoidModelFromDescription(
+            description,
+            humanoid.RigType
+        )
+    end)
+
+    if not dummySuccess or not dummy then
+        return nil
+    end
+
+    ActiveDummy = dummy
+
+    for _, object in ipairs(dummy:GetDescendants()) do
+        if object:IsA("BasePart") then
+            object.CanCollide = false
+            object.Massless = true
+            object.Anchored = false
+        end
+    end
+
+    local dummyRoot =
+        dummy:FindFirstChild("HumanoidRootPart")
+        or dummy.PrimaryPart
+
+    if dummyRoot then
+        dummyRoot.Anchored = true
+    end
+
+    dummy.Parent = workspace
+
+    return dummy
+end
+
+local function getAnimationId(animationObject)
+    if not animationObject or not animationObject:IsA("Animation") then
+        return nil
+    end
+
+    local id = animationObject.AnimationId
+    if id == "" then
+        return nil
+    end
+
+    return id
+end
+
+local function syncDummyAnimations(sourceHumanoid)
+    if not ActiveDummy or not sourceHumanoid then
+        return
+    end
+
+    local dummyHumanoid = ActiveDummy:FindFirstChildOfClass("Humanoid")
+    if not dummyHumanoid then
+        return
+    end
+
+    local seen = {}
+
+    for _, sourceTrack in ipairs(sourceHumanoid:GetPlayingAnimationTracks()) do
+        local sourceAnimation = sourceTrack.Animation
+        local animationId = getAnimationId(sourceAnimation)
+
+        if animationId then
+            seen[animationId] = true
+
+            local dummyTrack = dummyAnimationTracks[animationId]
+
+            if not dummyTrack then
+                local animationCopy = Instance.new("Animation")
+                animationCopy.AnimationId = animationId
+
+                local ok, loadedTrack = pcall(function()
+                    return dummyHumanoid:LoadAnimation(animationCopy)
+                end)
+
+                if ok and loadedTrack then
+                    dummyTrack = loadedTrack
+                    dummyTrack.Priority = sourceTrack.Priority
+                    dummyTrack.Looped = sourceTrack.Looped
+                    dummyAnimationTracks[animationId] = dummyTrack
+                else
+                    animationCopy:Destroy()
+                    continue
+                end
+            end
+
+            if not dummyTrack.IsPlaying then
+                dummyTrack:Play(0)
+                pcall(function()
+                    dummyTrack.TimePosition = sourceTrack.TimePosition
+                end)
+            end
+
+            local sourceSpeed = sourceTrack.Speed
+            if math.abs(dummyTrack.Speed - sourceSpeed) > 0.01 then
+                dummyTrack:AdjustSpeed(sourceSpeed)
+            end
+
+            pcall(function()
+                if math.abs(dummyTrack.TimePosition - sourceTrack.TimePosition) > 0.08 then
+                    dummyTrack.TimePosition = sourceTrack.TimePosition
+                end
+            end)
+        end
+    end
+
+    for animationId, dummyTrack in pairs(dummyAnimationTracks) do
+        if not seen[animationId] then
+            pcall(function()
+                if dummyTrack.IsPlaying then
+                    dummyTrack:Stop(0.1)
+                end
+            end)
+        end
+    end
+end
+
 local ScreenGui = Instance.new("ScreenGui")
 ScreenGui.Name = "funny_Gui"
 ScreenGui.ResetOnSpawn = true
@@ -265,18 +435,60 @@ local function stopAttachmentOnly()
     if animationTrack and animationTrack.IsPlaying then
         animationTrack:Stop(fadeTime)
     end
-    
+
     local myChar = LocalPlayer.Character
     local myHumanoid = myChar and myChar:FindFirstChild("Humanoid")
+    local myRootPart = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+    -- Save the position that the player had before attaching and use it as the
+    -- authoritative local restore pose. This prevents the attachment-relative
+    -- CFrame from becoming the player's new world-space position on detach.
+    local restoreCFrame = attachmentStartCFrame
+
+    if myRootPart then
+        myRootPart.Anchored = true
+
+        pcall(function()
+            setPhysicsRepRoot(myRootPart, nil)
+        end)
+
+        if restoreCFrame then
+            myRootPart.CFrame = restoreCFrame
+        end
+
+        myRootPart.Velocity = Vector3.zero
+        myRootPart.RotVelocity = Vector3.zero
+    end
+
+    destroyDummy()
+
     if myHumanoid then
         Camera.CameraSubject = myHumanoid
         Camera.CameraType = Enum.CameraType.Custom
+
+        pcall(function()
+            myHumanoid.PlatformStand = false
+            myHumanoid:ChangeState(Enum.HumanoidStateType.GettingUp)
+        end)
     end
-    
-    local myRootPart = myChar and myChar:FindFirstChild("HumanoidRootPart")
+
+    attachmentStartCFrame = nil
+
     if myRootPart then
-        myRootPart.Velocity = Vector3.zero
-        myRootPart.RotVelocity = Vector3.zero
+        -- Give the CFrame/hidden-property reset a physics step to settle before
+        -- releasing the local root. Re-assert once after the step to avoid a floor
+        -- snap or a stale server-side attachment pose winning immediately.
+        task.spawn(function()
+            RunService.Heartbeat:Wait()
+            if myRootPart.Parent then
+                if restoreCFrame then
+                    myRootPart.CFrame = restoreCFrame
+                end
+                myRootPart.Velocity = Vector3.zero
+                myRootPart.RotVelocity = Vector3.zero
+                myRootPart.Anchored = false
+            end
+        end)
     end
 end
 
@@ -329,6 +541,15 @@ local function startMainLoop()
                         jiggleRot = Vector3.zero
                         jiggleVel = Vector3.zero
                         lastTargetRot = CFrame.identity
+                        attachmentStartCFrame = myRoot.CFrame
+                        createDummy(myCurrentChar:FindFirstChildOfClass("Humanoid"))
+
+                        task.spawn(function()
+                            task.wait(0.1)
+                            if isEnabled and targetPlayer and myRoot.Parent then
+                                myRoot.Anchored = true
+                            end
+                        end)
                         break
                     end
                 end
@@ -343,11 +564,22 @@ local function startMainLoop()
             local enemyHumanoid = targetChar and targetChar:FindFirstChild("Humanoid")
             
             if targetRootPart and targetTorso and enemyHumanoid and enemyHumanoid.Health > 0 then
-                if Camera.CameraSubject ~= enemyHumanoid then
+                local targetHead = targetChar and targetChar:FindFirstChild("Head")
+
+                if not targetHead then
+                    stopAttachmentOnly()
+                    lastTargetRot = CFrame.identity
+                    return
+                end
+
+                -- While attached, the camera follows the actual target.
+                if Camera.CameraType ~= Enum.CameraType.Custom then
                     Camera.CameraType = Enum.CameraType.Custom
+                end
+                if Camera.CameraSubject ~= enemyHumanoid then
                     Camera.CameraSubject = enemyHumanoid
                 end
-                
+
                 local activeHumanoid = myCurrentChar:FindFirstChild("Humanoid")
                 if activeHumanoid and (not animationTrack or not animationTrack.IsPlaying) then
                     animationTrack = activeHumanoid:LoadAnimation(animation)
@@ -357,26 +589,39 @@ local function startMainLoop()
                         animationTrack:AdjustSpeed(0)
                     end
                 end
-                
+
+                -- The local camera follows the dummy, not the real replicated
+                -- character. Mirror every animation currently playing on the real
+                -- humanoid so the local view matches what the server sees.
+                syncDummyAnimations(activeHumanoid)
+
                 if lastTargetRot == CFrame.identity then
                     lastTargetRot = targetTorso.CFrame.Rotation
                 end
-                
-                pcall(function()
-                    sethiddenproperty(myRoot, "PhysicsRepRootPart", targetRootPart)
-                end)
-                
+
+                targetHead.Velocity = Vector3.zero
+                targetHead.RotVelocity = Vector3.zero
+
+                if activeHumanoid then
+                    activeHumanoid:ChangeState(Enum.HumanoidStateType.None)
+                end
+
+                -- Use the reference script's actual attachment object: the target HEAD.
+                -- Ppupdate's own position is still calculated below; it is only converted
+                -- into the target-head attachment space before assigning it to myRoot.
+                setPhysicsRepRoot(myRoot, targetHead)
+
                 local targetVel = targetRootPart.AssemblyLinearVelocity
                 local localVel = targetTorso.CFrame:VectorToObjectSpace(targetVel)
-                
+
                 local currentTargetRot = targetTorso.CFrame.Rotation
                 local rotDelta = lastTargetRot:ToObjectSpace(currentTargetRot)
                 local rx, ry, rz = rotDelta:ToEulerAnglesYXZ()
                 local yawVelocity = ry / math.max(dt, 0.001)
                 lastTargetRot = currentTargetRot
-                
+
                 local swayForce = ((localVel.X * 3.5) + (yawVelocity * 12.0)) * jiggleMultiplier
-                
+
                 local pitchForce = swayForce
                 local rollForce = 0
                 
@@ -393,6 +638,7 @@ local function startMainLoop()
                     math.clamp(jiggleRot.Z, -cap, cap)
                 )
                 
+                -- THIS is Ppupdate's original position/orientation calculation.
                 local baseOffsetRotation = CFrame.Angles(0, 0, math.rad(90))
                 local physicsJiggleRotation = CFrame.Angles(jiggleRot.X, 0, 0)
                 
@@ -402,11 +648,31 @@ local function startMainLoop()
                     * baseOffsetRotation
                 
                 local pivotOffset = CFrame.new(0, 0, 0.5)
-                
-                myRoot.CFrame = staticCFrame * pivotOffset * physicsJiggleRotation * pivotOffset:Inverse()
-                
+                local desiredWorldCFrame =
+                    staticCFrame
+                    * pivotOffset
+                    * physicsJiggleRotation
+                    * pivotOffset:Inverse()
+
+                -- Because PhysicsRepRootPart is now the target's HEAD, feed the
+                -- exact Ppupdate pose in the head's attachment coordinate space.
+                -- This is the part the previous merge was missing and is what prevents
+                -- the real rig from being displaced far from the intended Ppupdate position.
+                local attachedCFrame = targetHead.CFrame:ToObjectSpace(desiredWorldCFrame)
+                myRoot.CFrame = attachedCFrame
+
                 myRoot.Velocity = targetRootPart.AssemblyLinearVelocity
                 myRoot.RotVelocity = targetRootPart.AssemblyAngularVelocity
+
+                if ActiveDummy then
+                    local dummyRoot =
+                        ActiveDummy:FindFirstChild("HumanoidRootPart")
+                        or ActiveDummy.PrimaryPart
+
+                    if dummyRoot then
+                        dummyRoot.CFrame = desiredWorldCFrame
+                    end
+                end
             else
                 stopAttachmentOnly()
                 lastTargetRot = CFrame.identity
