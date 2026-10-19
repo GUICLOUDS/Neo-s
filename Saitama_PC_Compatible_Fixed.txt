@@ -1,0 +1,845 @@
+-- AN - HUB PRODUCTION
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local PhysicsService = game:GetService("PhysicsService")
+
+local lp = Players.LocalPlayer
+local c = lp.Character or lp.CharacterAdded:Wait()
+c.Archivable = true
+
+local PLAYER_GROUP = "RealPlayerGroup"
+local CLONE_GROUP = "CloneVisualGroup"
+
+pcall(function()
+    PhysicsService:RegisterCollisionGroup(PLAYER_GROUP)
+    PhysicsService:RegisterCollisionGroup(CLONE_GROUP)
+    PhysicsService:CollisionGroupSetCollidable(PLAYER_GROUP, CLONE_GROUP, false)
+end)
+
+local hrp0 = c:WaitForChild("HumanoidRootPart")
+local hrp1 = hrp0:Clone()
+c.Parent = nil
+hrp0.Parent = hrp1
+if hrp0:FindFirstChild("RootJoint") then
+    hrp0.RootJoint.Part0 = nil
+end
+hrp1.Parent = c
+c.Parent = workspace
+
+local clone = c:Clone()
+
+-- Build exact clone-to-original references while both hierarchies still match.
+-- This must happen before clone.Parent = c, otherwise c:GetDescendants()
+-- also contains the clone and identical-named accessory Handles get mispaired.
+local originalForClone = {}
+local function mapClonedHierarchy(originalParent, clonedParent)
+    local originalChildren = originalParent:GetChildren()
+    local clonedChildren = clonedParent:GetChildren()
+    for index, clonedChild in ipairs(clonedChildren) do
+        local originalChild = originalChildren[index]
+        if originalChild then
+            originalForClone[clonedChild] = originalChild
+            mapClonedHierarchy(originalChild, clonedChild)
+        end
+    end
+end
+mapClonedHierarchy(c, clone)
+
+c.Archivable = false
+clone.Name = lp.Name .. "_Clone"
+clone.Parent = c
+local cloneRoot = clone:WaitForChild("HumanoidRootPart")
+local cloneHumanoid = clone:WaitForChild("Humanoid")
+cloneHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+cloneHumanoid.AutoRotate = false
+cloneHumanoid.PlatformStand = true
+
+local cloneTorso = clone:FindFirstChild("UpperTorso") or clone:FindFirstChild("Torso") or cloneRoot
+
+for _, part in ipairs(c:GetDescendants()) do
+    if part:IsA("BasePart") then
+        part.Transparency = 1
+        pcall(function() part.CollisionGroup = PLAYER_GROUP end)
+    elseif part:IsA("Decal") then
+        part.Transparency = 1
+    elseif part:IsA("Accoutrement") or part:IsA("Accessory") then
+        local handle = part:FindFirstChild("Handle")
+        if handle and handle:IsA("BasePart") then
+            handle.Transparency = 1
+            pcall(function() handle.CollisionGroup = PLAYER_GROUP end)
+        end
+    end
+end
+
+-- Every cloned BasePart now maps to its exact source instance, including accessories.
+local partPairs = {}
+local cloneParts = {}
+local clonedDescendants = clone:GetDescendants()
+
+for _, object in ipairs(clonedDescendants) do
+    if object:IsA("Script") or object:IsA("LocalScript") then
+        object:Destroy()
+    elseif object:IsA("Motor6D") then
+        object:Destroy()
+    elseif object:IsA("BasePart") then
+        object.CanCollide = false
+        object.CanTouch = false
+        object.CanQuery = false
+        object.Massless = true
+        object.Anchored = true
+        pcall(function() object.CollisionGroup = CLONE_GROUP end)
+        table.insert(cloneParts, object)
+        if object.Name == "HumanoidRootPart" then
+            object.Transparency = 1
+        else
+            object.Transparency = 0
+            local realPart = originalForClone[object]
+            if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
+                table.insert(partPairs, {real = realPart, clone = object})
+            end
+        end
+    elseif object:IsA("Decal") then
+        object.Transparency = 0
+    end
+end
+
+local camera = workspace.CurrentCamera
+hrp0.Transparency = 1
+
+local capePart = Instance.new("Part")
+capePart.Name = "CapeMeshPart"
+capePart.Size = Vector3.new(2, 3, 0.1)
+capePart.Color = Color3.fromRGB(255, 255, 255)
+capePart.Material = Enum.Material.SmoothPlastic
+capePart.Anchored = true
+capePart.CanCollide = false
+capePart.CanTouch = false
+capePart.CanQuery = false
+capePart.Massless = true
+capePart.Parent = clone
+pcall(function() capePart.CollisionGroup = CLONE_GROUP end)
+
+local capeMesh = Instance.new("SpecialMesh")
+capeMesh.MeshType = Enum.MeshType.Brick
+capeMesh.Scale = Vector3.new(1, 1, 1)
+capeMesh.Parent = capePart
+
+local currentCapeAngle = 0
+local CAPE_PIVOT_OFFSET = Vector3.new(0, 0.8, 0.55)
+local CAPE_TOP_OFFSET = Vector3.new(0, -1.5, 0)
+local WORLD_DOWN = Vector3.new(0, -1, 0)
+local CONSEC_CAPE_LIFT = 45
+
+local realHumanoid = c:WaitForChild("Humanoid")
+local animator = realHumanoid:FindFirstChildOfClass("Animator") or Instance.new("Animator", realHumanoid)
+
+local PriorityLayers = {
+    Enum.AnimationPriority.Core,
+    Enum.AnimationPriority.Idle,
+    Enum.AnimationPriority.Movement,
+    Enum.AnimationPriority.Action,
+    Enum.AnimationPriority.Action2,
+    Enum.AnimationPriority.Action3,
+    Enum.AnimationPriority.Action4
+}
+
+local function SetLayer(track, layer)
+    layer = math.clamp(layer, 1, #PriorityLayers)
+    track.Priority = PriorityLayers[layer]
+end
+
+local idleAnim1 = Instance.new("Animation")
+idleAnim1.AnimationId = "rbxassetid://21633130"
+local idleTrack1 = animator:LoadAnimation(idleAnim1)
+SetLayer(idleTrack1, 2)
+
+local idleAnim2 = Instance.new("Animation")
+idleAnim2.AnimationId = "rbxassetid://31319431"
+local idleTrack2 = animator:LoadAnimation(idleAnim2)
+SetLayer(idleTrack2, 2)
+
+local moveAnim1 = Instance.new("Animation")
+moveAnim1.AnimationId = "http://www.roblox.com/asset/?version=1&id=214748382"
+local moveTrack1 = animator:LoadAnimation(moveAnim1)
+SetLayer(moveTrack1, 2)
+
+local moveAnim2 = Instance.new("Animation")
+moveAnim2.AnimationId = "http://www.roblox.com/asset/?version=1&id=31319431"
+local moveTrack2 = animator:LoadAnimation(moveAnim2)
+SetLayer(moveTrack2, 2)
+
+local moveAnim3 = Instance.new("Animation")
+moveAnim3.AnimationId = "http://www.roblox.com/asset/?version=1&id=21633130"
+local moveTrack3 = animator:LoadAnimation(moveAnim3)
+SetLayer(moveTrack3, 2)
+
+local moveAnim4 = Instance.new("Animation")
+moveAnim4.AnimationId = "http://www.roblox.com/asset/?version=1&id=68433924"
+local moveTrack4 = animator:LoadAnimation(moveAnim4)
+SetLayer(moveTrack4, 3)
+
+local rightAnim1 = Instance.new("Animation")
+rightAnim1.AnimationId = "rbxassetid://188853932"
+local rightTrack1 = animator:LoadAnimation(rightAnim1)
+SetLayer(rightTrack1, 4)
+
+local rightAnim2 = Instance.new("Animation")
+rightAnim2.AnimationId = "rbxassetid://313776454"
+local rightTrack2 = animator:LoadAnimation(rightAnim2)
+SetLayer(rightTrack2, 3)
+
+local rightAnim3 = Instance.new("Animation")
+rightAnim3.AnimationId = "rbxassetid://253205777"
+local rightTrack3 = animator:LoadAnimation(rightAnim3)
+SetLayer(rightTrack3, 3)
+
+local leftAnim1 = Instance.new("Animation")
+leftAnim1.AnimationId = "rbxassetid://99200153"
+local leftTrack1 = animator:LoadAnimation(leftAnim1)
+SetLayer(leftTrack1, 3)
+
+local leftAnim2 = Instance.new("Animation")
+leftAnim2.AnimationId = "rbxassetid://188854226"
+local leftTrack2 = animator:LoadAnimation(leftAnim2)
+SetLayer(leftTrack2, 4)
+
+local consecAnim1 = Instance.new("Animation")
+consecAnim1.AnimationId = "rbxassetid://94190213"
+local consecTrack1 = animator:LoadAnimation(consecAnim1)
+SetLayer(consecTrack1, 3)
+
+local consecAnim2 = Instance.new("Animation")
+consecAnim2.AnimationId = "rbxassetid://126752874"
+local consecTrack2 = animator:LoadAnimation(consecAnim2)
+SetLayer(consecTrack2, 4)
+consecTrack2.Looped = true
+
+local modeActive = false
+local isMoving = false
+
+local function playMovementAnims()
+    local fadeTime = 0.5
+    if not moveTrack1.IsPlaying then
+        moveTrack1:Play(fadeTime)
+        moveTrack1.TimePosition = 0
+        moveTrack1:AdjustSpeed(0.6)
+    end
+    if not moveTrack2.IsPlaying then
+        moveTrack2:Play(fadeTime)
+        moveTrack2.TimePosition = 0.4
+        moveTrack2:AdjustSpeed(0)
+    end
+    if not moveTrack3.IsPlaying then
+        moveTrack3:Play(fadeTime)
+        moveTrack3.TimePosition = 0.5
+        moveTrack3:AdjustSpeed(0)
+    end
+    if not moveTrack4.IsPlaying then
+        moveTrack4:Play(fadeTime)
+        moveTrack4.TimePosition = 1
+        moveTrack4:AdjustSpeed(0)
+    end
+end
+
+local function stopMovementAnims()
+    local fadeTime = 0.5
+    if moveTrack1.IsPlaying then moveTrack1:Stop(fadeTime) end
+    if moveTrack2.IsPlaying then moveTrack2:Stop(fadeTime) end
+    if moveTrack3.IsPlaying then moveTrack3:Stop(fadeTime) end
+    if moveTrack4.IsPlaying then moveTrack4:Stop(fadeTime) end
+end
+
+local function playRightSideAnim()
+    local fadeTime = 0.5
+    if not rightTrack1.IsPlaying then
+        rightTrack1:Play(fadeTime)
+        rightTrack1.TimePosition = 0.3
+        rightTrack1:AdjustSpeed(0)
+    end
+    if not rightTrack2.IsPlaying then
+        rightTrack2:Play(fadeTime)
+        rightTrack2.TimePosition = 0.5
+        rightTrack2:AdjustSpeed(0)
+    end
+    if not rightTrack3.IsPlaying then
+        rightTrack3:Play(fadeTime)
+        rightTrack3.TimePosition = 0.3
+        rightTrack3:AdjustSpeed(0)
+    end
+end
+
+local function stopRightSideAnim()
+    local fadeTime = 0.5
+    if rightTrack1.IsPlaying then rightTrack1:Stop(fadeTime) end
+    if rightTrack2.IsPlaying then rightTrack2:Stop(fadeTime) end
+    if rightTrack3.IsPlaying then rightTrack3:Stop(fadeTime) end
+end
+
+local function playLeftSideAnim()
+    local fadeTime = 0.5
+    if not leftTrack1.IsPlaying then
+        leftTrack1:Play(fadeTime)
+        leftTrack1.TimePosition = 0.1
+        leftTrack1:AdjustSpeed(0)
+    end
+    if not leftTrack2.IsPlaying then
+        leftTrack2:Play(fadeTime)
+        leftTrack2.TimePosition = 0.3
+        leftTrack2:AdjustSpeed(0)
+    end
+end
+
+local function stopLeftSideAnim()
+    local fadeTime = 0.5
+    if leftTrack1.IsPlaying then leftTrack1:Stop(fadeTime) end
+    if leftTrack2.IsPlaying then leftTrack2:Stop(fadeTime) end
+end
+
+local function playConsecutiveAnim()
+    stopRightSideAnim()
+    stopLeftSideAnim()
+
+    if not consecTrack1.IsPlaying then
+        consecTrack1:Play(0.5)
+        consecTrack1.TimePosition = 0.8
+        consecTrack1:AdjustSpeed(0)
+    end
+    if not consecTrack2.IsPlaying then
+        consecTrack2:Play(0)
+        consecTrack2.TimePosition = 0.2
+        consecTrack2:AdjustSpeed(5)
+    end
+end
+
+local function stopConsecutiveAnim()
+    if consecTrack1.IsPlaying then consecTrack1:Stop(0.5) end
+    if consecTrack2.IsPlaying then consecTrack2:Stop(0) end
+end
+
+local TILT_STIFFNESS = 35          
+local TILT_DAMPING = 8.0           
+local MAX_TILT = 0.5               
+local PIVOT_OFFSET = Vector3.new(0, 0.5, 0) 
+local CAMERA_HEIGHT = 0.6          
+
+local MULT_FORWARD_VEL = 0.015     
+local MULT_VERTICAL_VEL = 0.012    
+local MULT_SIDE_VEL = 0.015        
+local MULT_GRAVITY_INFLUENCE = 1.5 
+
+local IDLE_SPEED = 2.5             
+local IDLE_UP = 0.15               
+local IDLE_DOWN = 0.3              
+local IDLE_PITCH_FORWARD = 0.09    
+local IDLE_PITCH_BACK = 0.18       
+
+local STEP_SPEED = 2.0             
+local STEP_SWAY_WIDTH = 0.15       
+local STEP_BOUNCE_HEIGHT = 0.12    
+local STEP_ROLL_TILT = 0.08        
+local STEP_PITCH_FORWARD = 0.09    
+local STEP_PITCH_BACK = 0.18       
+
+local CONSEC_SWAY_SPEED = 12       
+local CONSEC_SWAY_WIDTH = 0.25      
+local CONSEC_SWAY_ROLL = 0.05       
+
+local IDLE_SPEED_THRESHOLD = 0.5   
+local BLEND_SPEED_BOUNCE = 10      
+local BLEND_SPEED_AIR = 8          
+
+local Y_TRANSITION_TIME = 0.5      
+local Y_TRANSITION_SPEED = 10
+local X_TRANSITION_SPEED = 18
+
+local idleTime = 0
+local walkTime = 0
+local consecSwayTime = 0
+local bounceAlpha = 0
+local airAlpha = 0
+local yOffset = 0
+
+local camAnchor = Instance.new("Part")
+camAnchor.Name = "CameraAnchor"
+camAnchor.Size = Vector3.new(0.1, 0.1, 0.1)
+camAnchor.Transparency = 1
+camAnchor.CanCollide = false
+camAnchor.Massless = true
+camAnchor.CFrame = hrp0.CFrame * CFrame.new(0, CAMERA_HEIGHT, 0)
+camAnchor.Parent = c
+
+local weld = Instance.new("WeldConstraint")
+weld.Part0 = hrp0
+weld.Part1 = camAnchor
+weld.Parent = camAnchor
+camera.CameraSubject = camAnchor
+
+local currentAngleX = 0
+local currentAngleZ = 0
+local velocityX = 0
+local velocityZ = 0
+
+local currentYDeg = 30
+local isConsecutiveHolding = false
+local isYTransitioning = false
+
+local smoothExtraX = 0
+local smoothExtraY = 0
+
+local BOX_SIZE = UDim2.new(0, 164, 0, 48)
+local BOX_GAP = 8
+local BOX_START_POS = UDim2.new(1, -24, 0.5, -76)
+local BOX_CORNER_RADIUS = UDim.new(0, 10)
+local TEXT_COLOR = Color3.fromRGB(240, 240, 240)
+local TEXT_SIZE = 16
+local FONT = Enum.Font.GothamMedium
+
+local ACTIVATE_COLOR_OFF = Color3.fromRGB(32, 32, 34)
+local ACTIVATE_COLOR_ON = Color3.fromRGB(46, 90, 60)
+local ACTIVATE_BORDER_OFF = Color3.fromRGB(70, 70, 75)
+local ACTIVATE_BORDER_ON = Color3.fromRGB(80, 160, 100)
+
+local SKILL_COLOR_ACTIVE = Color3.fromRGB(32, 32, 34)
+local SKILL_COLOR_INACTIVE = Color3.fromRGB(18, 18, 20)
+local SKILL_COLOR_PRESSED = Color3.fromRGB(50, 50, 54)
+local SKILL_BORDER_ACTIVE = Color3.fromRGB(70, 70, 75)
+local SKILL_BORDER_INACTIVE = Color3.fromRGB(45, 45, 48)
+
+local gui = Instance.new("ScreenGui")
+gui.Name = "GreyBoxGUI"
+gui.ResetOnSpawn = false
+gui.Parent = lp:WaitForChild("PlayerGui")
+
+local function updateBaseIdleAnimations()
+    local fadeTime = 0.5
+
+    if modeActive then
+        stopMovementAnims()
+        if idleTrack2.IsPlaying then idleTrack2:Stop(fadeTime) end
+
+        if not idleTrack1.IsPlaying then
+            idleTrack1:Play(fadeTime)
+            idleTrack1.TimePosition = 0
+            idleTrack1:AdjustSpeed(1)
+        end
+    else
+        if isMoving then
+            if idleTrack1.IsPlaying then idleTrack1:Stop(fadeTime) end
+            if idleTrack2.IsPlaying then idleTrack2:Stop(fadeTime) end
+            playMovementAnims()
+        else
+            stopMovementAnims()
+            if not idleTrack1.IsPlaying then
+                idleTrack1:Play(fadeTime)
+                idleTrack1.TimePosition = 0
+                idleTrack1:AdjustSpeed(1)
+            end
+            if not idleTrack2.IsPlaying then
+                idleTrack2:Play(fadeTime)
+                idleTrack2.TimePosition = 0
+                idleTrack2:AdjustSpeed(1)
+            end
+        end
+    end
+end
+
+local function destroyGui()
+    if idleTrack1.IsPlaying then idleTrack1:Stop(0) end
+    if idleTrack2.IsPlaying then idleTrack2:Stop(0) end
+    stopMovementAnims()
+    stopRightSideAnim()
+    stopLeftSideAnim()
+    stopConsecutiveAnim()
+    if capePart and capePart.Parent then
+        capePart:Destroy()
+    end
+    if gui and gui.Parent then
+        gui:Destroy()
+    end
+end
+
+if realHumanoid then
+    realHumanoid.Died:Connect(destroyGui)
+end
+
+c.AncestryChanged:Connect(function(_, parent)
+    if not parent then
+        destroyGui()
+    end
+end)
+
+local boxes = {}
+local strokes = {}
+local names = {
+    "Activate Mode",
+    "Punch",
+    "Consecutive"
+}
+
+for i = 0, 2 do
+    local box = Instance.new("TextButton")
+    box.Name = "GreyBox" .. (i + 1)
+    box.Size = BOX_SIZE
+    box.AnchorPoint = Vector2.new(1, 0)
+    box.Position = BOX_START_POS + UDim2.new(0, 0, 0, i * (BOX_SIZE.Y.Offset + BOX_GAP))
+    box.BackgroundColor3 = SKILL_COLOR_ACTIVE
+    box.BorderSizePixel = 0
+    box.Text = (i == 0 and "Activate Mode  [E]") or (i == 1 and "Punch  [Q]") or "Consecutive  [HOLD R]"
+    box.TextColor3 = TEXT_COLOR
+    box.TextSize = 14
+    box.TextScaled = false
+    box.TextWrapped = false
+    box.Font = FONT
+    box.AutoButtonColor = false
+    box.Parent = gui
+
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = BOX_CORNER_RADIUS
+    corner.Parent = box
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Color = SKILL_BORDER_ACTIVE
+    stroke.Thickness = 1
+    stroke.Parent = box
+
+    boxes[i + 1] = box
+    strokes[i + 1] = stroke
+end
+
+local activateBox = boxes[1]
+local activateStroke = strokes[1]
+local punchBox = boxes[2]
+local punchStroke = strokes[2]
+local consecutiveBox = boxes[3]
+local consecutiveStroke = strokes[3]
+
+local function updateSkillVisuals()
+    local color = modeActive and SKILL_COLOR_ACTIVE or SKILL_COLOR_INACTIVE
+    local border = modeActive and SKILL_BORDER_ACTIVE or SKILL_BORDER_INACTIVE
+    punchBox.BackgroundColor3 = color
+    punchBox.Active = modeActive
+    punchStroke.Color = border
+    consecutiveBox.BackgroundColor3 = color
+    consecutiveBox.Active = modeActive
+    consecutiveStroke.Color = border
+end
+
+local function updateActivateVisuals()
+    activateBox.BackgroundColor3 = modeActive and ACTIVATE_COLOR_ON or ACTIVATE_COLOR_OFF
+    activateStroke.Color = modeActive and ACTIVATE_BORDER_ON or ACTIVATE_BORDER_OFF
+end
+
+local function checkAnimationState()
+    updateBaseIdleAnimations()
+
+    if modeActive then
+        if isConsecutiveHolding then
+            playConsecutiveAnim()
+        else
+            stopConsecutiveAnim()
+            if currentYDeg == 30 then
+                stopLeftSideAnim()
+                playRightSideAnim()
+            elseif currentYDeg == -30 then
+                stopRightSideAnim()
+                playLeftSideAnim()
+            end
+        end
+    else
+        stopConsecutiveAnim()
+        stopRightSideAnim()
+        stopLeftSideAnim()
+    end
+end
+
+activateBox.MouseButton1Click:Connect(function()
+    if isConsecutiveHolding or isYTransitioning then return end
+
+    modeActive = not modeActive
+    if modeActive then
+        currentYDeg = (math.random(1, 2) == 1) and -30 or 30
+    end
+    updateActivateVisuals()
+    updateSkillVisuals()
+    checkAnimationState()
+end)
+
+punchBox.MouseButton1Click:Connect(function()
+    if not modeActive or isConsecutiveHolding or isYTransitioning then return end
+
+    isYTransitioning = true
+    currentYDeg = (currentYDeg == 30) and -30 or 30
+    checkAnimationState()
+
+    task.delay(Y_TRANSITION_TIME, function()
+        isYTransitioning = false
+    end)
+end)
+
+punchBox.MouseButton1Down:Connect(function()
+    if modeActive and not isConsecutiveHolding and not isYTransitioning then
+        punchBox.BackgroundColor3 = SKILL_COLOR_PRESSED
+    end
+end)
+
+punchBox.MouseButton1Up:Connect(function()
+    if modeActive and not isConsecutiveHolding then
+        punchBox.BackgroundColor3 = SKILL_COLOR_ACTIVE
+    end
+end)
+
+punchBox.MouseLeave:Connect(function()
+    if modeActive and not isConsecutiveHolding then
+        punchBox.BackgroundColor3 = SKILL_COLOR_ACTIVE
+    end
+end)
+
+consecutiveBox.MouseButton1Down:Connect(function()
+    if modeActive then
+        consecutiveBox.BackgroundColor3 = SKILL_COLOR_PRESSED
+        isConsecutiveHolding = true
+        checkAnimationState()
+    end
+end)
+
+consecutiveBox.MouseButton1Up:Connect(function()
+    if modeActive then
+        consecutiveBox.BackgroundColor3 = SKILL_COLOR_ACTIVE
+        isConsecutiveHolding = false
+        checkAnimationState()
+    end
+end)
+
+consecutiveBox.MouseLeave:Connect(function()
+    if modeActive then
+        consecutiveBox.BackgroundColor3 = SKILL_COLOR_ACTIVE
+        isConsecutiveHolding = false
+        checkAnimationState()
+    end
+end)
+
+-- PC keyboard controls: E toggles mode, Q punches, and holding R uses Consecutive.
+-- Ignore keybinds while the player is typing in a text box.
+UserInputService.InputBegan:Connect(function(input, gameProcessed)
+    if gameProcessed or UserInputService:GetFocusedTextBox() then return end
+
+    if input.KeyCode == Enum.KeyCode.E then
+        if isConsecutiveHolding or isYTransitioning then return end
+        modeActive = not modeActive
+        if modeActive then
+            currentYDeg = (math.random(1, 2) == 1) and -30 or 30
+        end
+        updateActivateVisuals()
+        updateSkillVisuals()
+        checkAnimationState()
+    elseif input.KeyCode == Enum.KeyCode.Q then
+        if not modeActive or isConsecutiveHolding or isYTransitioning then return end
+        isYTransitioning = true
+        currentYDeg = (currentYDeg == 30) and -30 or 30
+        checkAnimationState()
+        task.delay(Y_TRANSITION_TIME, function()
+            isYTransitioning = false
+        end)
+    elseif input.KeyCode == Enum.KeyCode.R then
+        if modeActive then
+            isConsecutiveHolding = true
+            consecutiveBox.BackgroundColor3 = SKILL_COLOR_PRESSED
+            checkAnimationState()
+        end
+    end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+    if input.KeyCode == Enum.KeyCode.R and isConsecutiveHolding then
+        isConsecutiveHolding = false
+        consecutiveBox.BackgroundColor3 = modeActive and SKILL_COLOR_ACTIVE or SKILL_COLOR_INACTIVE
+        checkAnimationState()
+    end
+end)
+
+updateSkillVisuals()
+updateActivateVisuals()
+checkAnimationState()
+
+RunService.Heartbeat:Connect(function(dt)
+    if not c or not c.Parent or not hrp0 or not hrp1 or not clone or not clone.Parent then return end
+    
+    for _, part in ipairs(cloneParts) do
+        part.CanCollide = false
+        part.CanTouch = false
+        part.CanQuery = false
+    end
+
+    -- In shift-lock, explicitly keep the driver root aligned to the camera yaw.
+    -- The visual rig is rebuilt from this root later in the same update.
+    if UserInputService.MouseBehavior == Enum.MouseBehavior.LockCenter then
+        local currentCamera = workspace.CurrentCamera
+        if currentCamera then
+            local look = currentCamera.CFrame.LookVector
+            local flatLook = Vector3.new(look.X, 0, look.Z)
+            if flatLook.Magnitude > 0.001 then
+                local rootPosition = hrp1.Position
+                hrp1.CFrame = CFrame.lookAt(rootPosition, rootPosition + flatLook.Unit)
+            end
+        end
+    end
+
+    local moveVel = hrp1.CFrame:VectorToObjectSpace(hrp1.AssemblyLinearVelocity)
+    local horizontalSpeed = Vector3.new(moveVel.X, 0, moveVel.Z).Magnitude
+    local currentlyMoving = horizontalSpeed >= IDLE_SPEED_THRESHOLD
+
+    if currentlyMoving ~= isMoving then
+        isMoving = currentlyMoving
+        updateBaseIdleAnimations()
+    end
+
+    local targetExtraXDeg = 0
+    local targetExtraYDeg = 0
+
+    if modeActive then
+        if isConsecutiveHolding then
+            targetExtraXDeg = -43
+            targetExtraYDeg = 0
+        else
+            targetExtraXDeg = 10
+            targetExtraYDeg = currentYDeg
+        end
+    end
+
+    local factorX = 1 - math.exp(-X_TRANSITION_SPEED * dt)
+    local factorY = 1 - math.exp(-Y_TRANSITION_SPEED * dt)
+
+    smoothExtraX = smoothExtraX + (math.rad(targetExtraXDeg) - smoothExtraX) * factorX
+    smoothExtraY = smoothExtraY + (math.rad(targetExtraYDeg) - smoothExtraY) * factorY
+
+    local allowPhysicsBounce = not isConsecutiveHolding
+
+    local isGrounded = realHumanoid and (
+        realHumanoid:GetState() == Enum.HumanoidStateType.Running or 
+        realHumanoid:GetState() == Enum.HumanoidStateType.RunningNoPhysics or 
+        realHumanoid:GetState() == Enum.HumanoidStateType.Landed
+    )
+    local isIdle = horizontalSpeed < IDLE_SPEED_THRESHOLD
+
+    local targetAlpha = (isIdle and allowPhysicsBounce) and 1 or 0
+    bounceAlpha = bounceAlpha + (targetAlpha - bounceAlpha) * math.clamp(BLEND_SPEED_BOUNCE * dt, 0, 1)
+
+    local targetAir = (isGrounded and allowPhysicsBounce) and 0 or 1
+    airAlpha = airAlpha + (targetAir - airAlpha) * math.clamp(BLEND_SPEED_AIR * dt, 0, 1)
+
+    if allowPhysicsBounce then
+        idleTime = idleTime + dt * IDLE_SPEED
+        if isGrounded and not isIdle then
+            walkTime = walkTime + dt * STEP_SPEED
+        end
+    end
+
+    local idleWeight = bounceAlpha * (1 - airAlpha)
+    local idlePhase = math.sin(idleTime)
+    local idleY = 0
+    local idlePitchX = 0
+
+    if idlePhase > 0 then
+        idleY = idlePhase * IDLE_UP * idleWeight
+        idlePitchX = idlePhase * IDLE_PITCH_FORWARD * idleWeight
+    else
+        idleY = idlePhase * IDLE_DOWN * idleWeight
+        idlePitchX = idlePhase * IDLE_PITCH_BACK * idleWeight
+    end
+
+    local walkWeight = allowPhysicsBounce and ((1 - bounceAlpha) * (1 - airAlpha)) or 0
+    
+    local swayPhase = math.sin(walkTime)
+    local walkX = swayPhase * STEP_SWAY_WIDTH * walkWeight
+    local walkY = -math.abs(swayPhase) * STEP_BOUNCE_HEIGHT * walkWeight
+    local walkRollZ = math.cos(walkTime) * STEP_ROLL_TILT * walkWeight
+
+    local pitchPhase = math.sin(walkTime)
+    local walkPitchX = 0
+    if pitchPhase > 0 then
+        walkPitchX = pitchPhase * STEP_PITCH_FORWARD * walkWeight
+    else
+        walkPitchX = pitchPhase * STEP_PITCH_BACK * walkWeight
+    end
+
+    local consecSwayX = 0
+    local consecRollZ = 0
+
+    if isConsecutiveHolding then
+        consecSwayTime = consecSwayTime + dt * CONSEC_SWAY_SPEED
+        consecSwayX = math.sin(consecSwayTime) * CONSEC_SWAY_WIDTH
+        consecRollZ = math.cos(consecSwayTime) * CONSEC_SWAY_ROLL
+    else
+        consecSwayTime = 0
+    end
+
+    local targetAngleX = 0
+    local targetAngleZ = 0
+
+    if allowPhysicsBounce then
+        targetAngleX = math.clamp((moveVel.Z * MULT_FORWARD_VEL) + (moveVel.Y * MULT_VERTICAL_VEL), -MAX_TILT, MAX_TILT)
+        targetAngleZ = math.clamp(-moveVel.X * MULT_SIDE_VEL, -MAX_TILT, MAX_TILT)
+
+        local characterLook = hrp1.CFrame.LookVector
+        local characterRight = hrp1.CFrame.RightVector
+        local upVector = Vector3.new(0, 1, 0)
+
+        local gravityPitch = characterLook:Dot(upVector)
+        local gravityRoll = characterRight:Dot(upVector)
+
+        targetAngleX = math.clamp(targetAngleX - (gravityPitch * MULT_GRAVITY_INFLUENCE), -MAX_TILT, MAX_TILT)
+        targetAngleZ = math.clamp(targetAngleZ + (gravityRoll * MULT_GRAVITY_INFLUENCE), -MAX_TILT, MAX_TILT)
+    end
+
+    local forceX = (targetAngleX - currentAngleX) * TILT_STIFFNESS
+    velocityX = (velocityX + forceX * dt) * math.clamp(1 - (TILT_DAMPING * dt), 0, 1)
+    currentAngleX = currentAngleX + velocityX * dt
+
+    local forceZ = (targetAngleZ - currentAngleZ) * TILT_STIFFNESS
+    velocityZ = (velocityZ + forceZ * dt) * math.clamp(1 - (TILT_DAMPING * dt), 0, 1)
+    currentAngleZ = currentAngleZ + velocityZ * dt
+
+    local totalAngleX = currentAngleX + idlePitchX + walkPitchX + smoothExtraX
+    local totalAngleZ = currentAngleZ + walkRollZ + consecRollZ
+
+    local offsetPos = Vector3.new(walkX + consecSwayX, yOffset + idleY + walkY, 0)
+    local baseCFrame = hrp1.CFrame * CFrame.new(offsetPos)
+    local pivotCFrame = baseCFrame * CFrame.new(PIVOT_OFFSET)
+    local tiltRotation = CFrame.Angles(totalAngleX, smoothExtraY, totalAngleZ)
+    local calculatedCFrame = pivotCFrame * tiltRotation * CFrame.new(-PIVOT_OFFSET)
+
+    hrp0.CFrame = calculatedCFrame
+    hrp0.AssemblyLinearVelocity = hrp1.AssemblyLinearVelocity
+    cloneRoot.CFrame = calculatedCFrame
+
+    local realRootCFrame = hrp1.CFrame
+    for _, pair in ipairs(partPairs) do
+        local offsetFromRealRoot = realRootCFrame:ToObjectSpace(pair.real.CFrame)
+        pair.clone.CFrame = calculatedCFrame * offsetFromRealRoot
+    end
+
+    if capePart and capePart.Parent and cloneTorso then
+        local torsoCFrame = cloneTorso.CFrame
+        local velocity = hrp1.AssemblyLinearVelocity
+        local localVel = torsoCFrame:VectorToObjectSpace(velocity)
+        local localGravity = torsoCFrame:VectorToObjectSpace(WORLD_DOWN)
+
+        local gravityAngle = math.deg(math.atan2(localGravity.Z, -localGravity.Y))
+        local forwardSpeed = -localVel.Z 
+        local speedLift = math.clamp(forwardSpeed * 3.5, -20, 80)
+        local fallSpeed = math.min(localVel.Y, 0)
+        local fallLift = math.clamp(-fallSpeed * 2.5, 0, 50)
+        
+        local consecLift = isConsecutiveHolding and CONSEC_CAPE_LIFT or 0
+
+        local targetCapeAngle = math.clamp(gravityAngle + speedLift + fallLift + consecLift, 0, 85)
+        local lerpSpeed = math.clamp(dt * 8, 0, 1)
+        currentCapeAngle = currentCapeAngle + (targetCapeAngle - currentCapeAngle) * lerpSpeed
+
+        local attachmentCFrame = torsoCFrame * CFrame.new(CAPE_PIVOT_OFFSET)
+        local rotatedCFrame = attachmentCFrame * CFrame.Angles(math.rad(-currentCapeAngle), 0, 0)
+        capePart.CFrame = rotatedCFrame * CFrame.new(CAPE_TOP_OFFSET)
+    end
+end)
+
