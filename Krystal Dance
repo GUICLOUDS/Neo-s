@@ -1,0 +1,2258 @@
+-- PC dance keybinds. Moon Walk uses Y and Sit uses T.
+local KRYSTAL_DANCE_KEYBINDS = {
+    {dance = "The Nutty", keyCode = "E", keyLabel = "E"},
+    {dance = "You Spin Me", keyCode = "R", keyLabel = "R"},
+    {dance = "Moon Walk", keyCode = "Y", keyLabel = "Y"},
+    {dance = "Slav Dance", keyCode = "U", keyLabel = "U"},
+    {dance = "barrel roll", keyCode = "P", keyLabel = "P"},
+    {dance = "The Swoosher", keyCode = "Q", keyLabel = "Q"},
+    {dance = "running in the 90's", keyCode = "K", keyLabel = "K"},
+    {dance = "Here comes the money", keyCode = "J", keyLabel = "J"},
+    {dance = "The shuffle", keyCode = "G", keyLabel = "G"},
+    {dance = "Push up", keyCode = "Z", keyLabel = "Z"},
+    {dance = "SpongeBob Dance", keyCode = "H", keyLabel = "H"},
+    {dance = "Dancer", keyCode = "L", keyLabel = "L"},
+    {dance = "sit", keyCode = "T", keyLabel = "T"},
+    {dance = "Spooky", keyCode = "Semicolon", keyLabel = ";"},
+    {dance = "leg sway", keyCode = "LeftBracket", keyLabel = "["},
+    {dance = "The Jerky", keyCode = "F", keyLabel = "F"},
+}
+
+local KRYSTAL_MUSIC_CONFIG = {
+    {dance = "Here comes the money", file = "Here comes the money.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Here%20comes%20the%20moeny.mp3", keyCode = "J", keyLabel = "J"},
+    {dance = "Moon Walk", file = "Moonwalk.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Moonwalk.mp3", keyCode = "Y", keyLabel = "Y"},
+    {dance = "running in the 90's", file = "Running In The 90's.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Running%20In%20The%2090%27s.mp3", keyCode = "K", keyLabel = "K"},
+    {dance = "Slav Dance", file = "Slav Dance.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Slav%20Dance.mp3", keyCode = "U", keyLabel = "U"},
+    {dance = "You Spin Me", file = "Spin me right round.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Spin%20me%20right%20round.mp3", keyCode = "R", keyLabel = "R"},
+    {dance = "SpongeBob Dance", file = "Spongebob.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Spongebob.mp3", keyCode = "H", keyLabel = "H"},
+    {dance = "Spooky", file = "Spooky.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/Spooky.mp3", keyCode = "Semicolon", keyLabel = ";"},
+    {dance = "The Nutty", file = "The Nutty.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/The%20Nutty.mp3", keyCode = "E", keyLabel = "E"},
+    {dance = "The Swoosher", file = "the swoosher.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/the%20swoosher.mp3", keyCode = "Q", keyLabel = "Q"},
+    {dance = "barrel roll", file = "Do A Barrel Roll.mp3", url = "https://raw.githubusercontent.com/GUICLOUDS/EMOTES/main/%E2%99%AB%20Do%20A%20Barrel%20Roll!%20%E2%99%AB.mp3", keyCode = "P", keyLabel = "P"},
+    {dance = "The Jerky", file = "The Jerky.mp3", url = "https://github.com/GUICLOUDS/EMOTES/raw/refs/heads/main/-Yakety%20Sax-%20Music.mp3", keyCode = "F", keyLabel = "F"},
+    {dance = "The shuffle", file = "The shuffle.mp3", url = "https://github.com/GUICLOUDS/EMOTES/raw/refs/heads/main/hotel%20room%20service%20pitbull%20%5Bbest%20part%20edit%5D.mp3", keyCode = "G", keyLabel = "G"},
+}
+local KRYSTAL_MUSIC_PATHS = {}
+
+do
+    local Players = game:GetService("Players")
+    local player = Players.LocalPlayer
+    local playerGui = player:WaitForChild("PlayerGui")
+    local folderName = "Krystal"
+    local loaderName = "KrystalMusicLoader"
+    local total = #KRYSTAL_MUSIC_CONFIG
+    local readyCount = 0
+    local failedNames = {}
+    local canUseFiles = type(makefolder) == "function" and type(writefile) == "function" and type(isfile) == "function"
+
+    local oldLoader
+    pcall(function()
+        oldLoader = game:GetService("CoreGui"):FindFirstChild(loaderName)
+        if oldLoader then oldLoader:Destroy() end
+    end)
+    pcall(function()
+        oldLoader = playerGui:FindFirstChild(loaderName)
+        if oldLoader then oldLoader:Destroy() end
+    end)
+
+    local loader = Instance.new("ScreenGui")
+    loader.Name = loaderName
+    loader.ResetOnSpawn = false
+    loader.IgnoreGuiInset = true
+    loader.DisplayOrder = 999999
+
+    local card = Instance.new("Frame")
+    card.Name = "Card"
+    card.Size = UDim2.fromOffset(300, 108)
+    card.Position = UDim2.new(0, 18, 0.5, -54)
+    card.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+    card.BackgroundTransparency = 0
+    card.BorderSizePixel = 0
+    card.Parent = loader
+
+    local title = Instance.new("TextLabel")
+    title.BackgroundTransparency = 1
+    title.Position = UDim2.fromOffset(13, 9)
+    title.Size = UDim2.new(1, -26, 0, 22)
+    title.Font = Enum.Font.GothamBold
+    title.Text = "KRYSTAL MUSIC SETUP"
+    title.TextColor3 = Color3.fromRGB(218, 194, 255)
+    title.TextSize = 14
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = card
+
+    local status = Instance.new("TextLabel")
+    status.BackgroundTransparency = 1
+    status.Position = UDim2.fromOffset(13, 34)
+    status.Size = UDim2.new(1, -26, 0, 25)
+    status.Font = Enum.Font.GothamMedium
+    status.Text = "Downloading all musics..."
+    status.TextColor3 = Color3.fromRGB(245, 245, 250)
+    status.TextSize = 12
+    status.TextXAlignment = Enum.TextXAlignment.Left
+    status.TextTruncate = Enum.TextTruncate.AtEnd
+    status.Parent = card
+
+    local barBack = Instance.new("Frame")
+    barBack.Position = UDim2.fromOffset(13, 68)
+    barBack.Size = UDim2.new(1, -26, 0, 8)
+    barBack.BackgroundColor3 = Color3.fromRGB(48, 43, 61)
+    barBack.BorderSizePixel = 0
+    barBack.Parent = card
+    local barFill = Instance.new("Frame")
+    barFill.Size = UDim2.new(0, 0, 1, 0)
+    barFill.BackgroundColor3 = Color3.fromRGB(164, 105, 255)
+    barFill.BorderSizePixel = 0
+    barFill.Parent = barBack
+
+    local footer = Instance.new("TextLabel")
+    footer.BackgroundTransparency = 1
+    footer.Position = UDim2.fromOffset(13, 81)
+    footer.Size = UDim2.new(1, -26, 0, 20)
+    footer.Font = Enum.Font.Gotham
+    footer.Text = "Saving tracks to Krystal/"
+    footer.TextColor3 = Color3.fromRGB(169, 163, 187)
+    footer.TextSize = 10
+    footer.TextXAlignment = Enum.TextXAlignment.Left
+    footer.Parent = card
+
+    local parented = pcall(function()
+        loader.Parent = game:GetService("CoreGui")
+    end)
+    if not parented or not loader.Parent then
+        loader.Parent = playerGui
+    end
+
+    local function updateProgress(index, message)
+        status.Text = message
+        barFill.Size = UDim2.new(math.clamp(index / math.max(total, 1), 0, 1), 0, 1, 0)
+        task.wait()
+    end
+
+    local function validAudioData(data)
+        if type(data) ~= "string" or #data < 1024 then
+            return false
+        end
+        local head = data:sub(1, 256):lower()
+        if head:find("<html", 1, true) or head:find("<!doctype", 1, true) or head:find("404: not found", 1, true) then
+            return false
+        end
+        return true
+    end
+
+    local function cachedFileIsValid(path)
+        local ok, exists = pcall(isfile, path)
+        if not ok or not exists then return false end
+        if type(readfile) == "function" then
+            local readOk, data = pcall(readfile, path)
+            if not readOk or not validAudioData(data) then return false end
+        end
+        return true
+    end
+
+    local function fetchBytes(url)
+        local requestFunction
+        if type(request) == "function" then
+            requestFunction = request
+        elseif type(http_request) == "function" then
+            requestFunction = http_request
+        elseif type(syn) == "table" and type(syn.request) == "function" then
+            requestFunction = syn.request
+        end
+
+        if requestFunction then
+            local ok, response = pcall(requestFunction, {
+                Url = url,
+                Method = "GET",
+                Headers = { ["User-Agent"] = "Krystal-Music-Loader" },
+            })
+            if ok and type(response) == "table" then
+                local code = tonumber(response.StatusCode or response.StatusCodeValue or response.Status) or 200
+                local body = response.Body or response.body
+                if code >= 200 and code < 300 and validAudioData(body) then
+                    return body
+                end
+            end
+        end
+
+        local ok, body = pcall(function()
+            return game:HttpGet(url)
+        end)
+        if ok and validAudioData(body) then
+            return body
+        end
+        return nil
+    end
+
+    if canUseFiles then
+        pcall(function()
+            if type(isfolder) ~= "function" or not isfolder(folderName) then
+                makefolder(folderName)
+            end
+        end)
+    else
+        footer.Text = "This executor is missing file APIs; music may be unavailable."
+    end
+
+    task.wait(0.15)
+    for index, entry in ipairs(KRYSTAL_MUSIC_CONFIG) do
+        local path = folderName .. "/" .. entry.file
+        updateProgress(index - 1, "Checking " .. index .. "/" .. total .. "  •  " .. entry.file)
+        local available = canUseFiles and cachedFileIsValid(path)
+
+        if not available and canUseFiles then
+            status.Text = "Downloading " .. index .. "/" .. total .. "  •  " .. entry.file
+            task.wait()
+            local bytes = fetchBytes(entry.url)
+            if bytes then
+                local writeOk = pcall(writefile, path, bytes)
+                available = writeOk and cachedFileIsValid(path)
+            end
+        end
+
+        if available then
+            KRYSTAL_MUSIC_PATHS[entry.dance] = path
+            readyCount = readyCount + 1
+        else
+            table.insert(failedNames, entry.file)
+        end
+        updateProgress(index, (available and "Ready " or "Unavailable ") .. index .. "/" .. total .. "  •  " .. entry.file)
+    end
+
+    barFill.Size = UDim2.new(1, 0, 1, 0)
+    if readyCount == total then
+        status.Text = "All music ready — starting dances..."
+    else
+        status.Text = readyCount .. "/" .. total .. " tracks ready; continuing..."
+        footer.Text = "Failed downloads can be retried next execution."
+    end
+    task.wait(0.75)
+    pcall(function() loader:Destroy() end)
+end
+
+local S = {}
+S.Players=game:GetService("Players")
+S.RunService=game:GetService("RunService")
+S.PhysicsService=game:GetService("PhysicsService")
+S.TweenService=game:GetService("TweenService")
+S.UserInputService=game:GetService("UserInputService")
+S.lp=S.Players.LocalPlayer
+S.playerGui=S.lp:WaitForChild("PlayerGui")
+S.c=S.lp.Character or S.lp.CharacterAdded:Wait()
+if not S.c or not S.c.Parent then return end
+S.c.Archivable=true
+pcall(function()
+local oldClone=workspace:FindFirstChild(S.lp.Name.."_Clone")
+if oldClone then oldClone:Destroy() end
+if S.playerGui:FindFirstChild("EmoteGui") then
+S.playerGui.EmoteGui:Destroy()
+end
+end)
+S.PLAYER_GROUP="Noli"
+S.CLONE_GROUP="Is GAY"
+S.MONEY_PROJECTILE_GROUP="KrystalMoneyProjectile"
+pcall(function() S.PhysicsService:RegisterCollisionGroup(S.PLAYER_GROUP) end)
+pcall(function() S.PhysicsService:RegisterCollisionGroup(S.CLONE_GROUP) end)
+pcall(function() S.PhysicsService:RegisterCollisionGroup(S.MONEY_PROJECTILE_GROUP) end)
+pcall(function() S.PhysicsService:CollisionGroupSetCollidable(S.PLAYER_GROUP,S.CLONE_GROUP,false) end)
+pcall(function() S.PhysicsService:CollisionGroupSetCollidable(S.PLAYER_GROUP,S.MONEY_PROJECTILE_GROUP,false) end)
+pcall(function() S.PhysicsService:CollisionGroupSetCollidable(S.MONEY_PROJECTILE_GROUP,"Default",true) end)
+S.hrp0=S.c:WaitForChild("HumanoidRootPart")
+S.humanoid=S.c:WaitForChild("Humanoid")
+S.hrp1=S.hrp0:Clone()
+S.c.Parent=nil
+S.hrp0.Parent=S.hrp1
+if S.hrp0:FindFirstChild("RootJoint") then
+S.hrp0.RootJoint.Part0=nil
+end
+S.hrp1.Parent=S.c
+S.c.Parent=workspace
+S.originalWalkSpeed=16
+S.originalJumpPower=S.humanoid.JumpPower
+S.originalJumpHeight=S.humanoid.JumpHeight
+S.humanoid.WalkSpeed=0
+S.humanoid.JumpPower=0
+if S.humanoid.UseJumpPower==false then
+S.humanoid.JumpHeight=0
+end
+S.clone=S.c:Clone()
+S.c.Archivable=false
+S.clone.Name=S.lp.Name.."_Clone"
+S.clone.Parent=workspace
+S.cloneRoot=S.clone:WaitForChild("HumanoidRootPart")
+S.cloneHumanoid=S.clone:WaitForChild("Humanoid")
+S.cloneHumanoid.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+S.cloneHumanoid.AutoRotate=false
+S.cloneHumanoid.PlatformStand=true
+for _,v in ipairs(S.clone:GetChildren()) do
+if v:IsA("Shirt") or v:IsA("Pants") or v:IsA("Accessory") or v:IsA("Hat") or v:IsA("CharacterMesh") or v:IsA("Shirt Graphic") then
+v:Destroy()
+end
+end
+S.cloneHead=S.clone:WaitForChild("Head")
+pcall(function()
+local introsound=Instance.new("Sound",S.cloneHead)
+introsound.SoundId="rbxassetid://236146895"
+introsound.Volume=8
+introsound:Play()
+game:GetService("Debris"):AddItem(introsound,6)
+end)
+pcall(function()
+if S.cloneHead:FindFirstChild("face") then
+S.cloneHead.face.Texture="rbxasset://textures/face.png"
+else
+local face=Instance.new("Decal",S.cloneHead)
+face.Name="face"
+face.Texture="rbxasset://textures/face.png"
+end
+for _,part in ipairs(S.clone:GetDescendants()) do
+if part:IsA("BasePart") then
+if part.Name=="Head" then
+part.BrickColor=BrickColor.new("White")
+elseif part.Name~="HumanoidRootPart" then
+part.BrickColor=BrickColor.new("Really black")
+end
+end
+end
+end)
+for _,part in ipairs(S.c:GetDescendants()) do
+if part:IsA("BasePart") then
+part.Transparency=1
+pcall(function() part.CollisionGroup=S.PLAYER_GROUP end)
+elseif part:IsA("Decal") then
+part.Transparency=1
+elseif part:IsA("Accoutrement") or part:IsA("Accessory") then
+local handle=part:FindFirstChild("Handle")
+if handle and handle:IsA("BasePart") then
+handle.Transparency=1
+pcall(function() handle.CollisionGroup=S.PLAYER_GROUP end)
+end
+end
+end
+S.partPairs={}
+S.cloneParts={}
+for _,object in ipairs(S.clone:GetDescendants()) do
+if object:IsA("Script") or object:IsA("LocalScript") then
+object:Destroy()
+elseif object:IsA("Motor6D") then
+object:Destroy()
+elseif object:IsA("BasePart") then
+object.CanCollide=false
+object.CanTouch=false
+object.CanQuery=false
+object.Massless=true
+object.Anchored=true
+pcall(function() object.CollisionGroup=S.CLONE_GROUP end)
+table.insert(S.cloneParts,object)
+object.Transparency=1
+if object.Name~="HumanoidRootPart" then
+local realPart=S.c:FindFirstChild(object.Name,true)
+if realPart and realPart:IsA("BasePart") and realPart~=S.hrp0 and realPart~=S.hrp1 then
+table.insert(S.partPairs,{real=realPart,clone=object})
+end
+end
+elseif object:IsA("Decal") then
+object.Transparency=1
+end
+end
+S.hrp0.Transparency=1
+S.fedora=Instance.new("Part",S.clone)
+S.fedora.Size=Vector3.new(2,2,2)
+S.fedora.CanCollide=false
+S.fedora.Transparency=1
+S.fedoraweld=Instance.new("Weld",S.fedora)
+S.fedoraweld.Part0=S.fedora
+S.fedoraweld.Part1=S.cloneHead
+S.fedoraweld.C0=CFrame.new(0,-0.75,0)
+S.mfedora=Instance.new("SpecialMesh",S.fedora)
+S.mfedora.MeshType="FileMesh"
+S.mfedora.Scale=Vector3.new(.97,.97,.97)
+S.mfedora.MeshId,S.mfedora.TextureId='http://www.roblox.com/asset/?id=13640868','http://www.roblox.com/asset/?id=18987684'
+S.shades=Instance.new("Part",S.clone)
+S.shades.Size=Vector3.new(2,2,2)
+S.shades.CanCollide=false
+S.shades.Transparency=1
+S.shadesweld=Instance.new("Weld",S.shades)
+S.shadesweld.Part0=S.shades
+S.shadesweld.Part1=S.cloneHead
+S.shadesweld.C0=CFrame.new(0,-0.2,0.15)
+S.mshades=Instance.new("SpecialMesh",S.shades)
+S.mshades.MeshType="FileMesh"
+S.mshades.Scale=Vector3.new(1.04,1.28,1.04)
+S.mshades.MeshId,S.mshades.TextureId='http://www.roblox.com/asset/?id=1577360','http://www.roblox.com/asset/?id=1577349'
+task.spawn(function()
+local bigfedora=Instance.new("Part",workspace)
+bigfedora.Size=Vector3.new(2,2,2)
+bigfedora.CFrame=CFrame.new(S.cloneRoot.Position)*CFrame.new(math.random(-20,20),20,math.random(-20,20))
+bigfedora.CanCollide=false
+bigfedora.Anchored=true
+local mbigfedora=Instance.new("SpecialMesh",bigfedora)
+mbigfedora.MeshType="FileMesh"
+mbigfedora.Scale=Vector3.new(6,7,7)
+mbigfedora.MeshId,mbigfedora.TextureId='http://www.roblox.com/asset/?id=13640868','http://www.roblox.com/asset/?id=18987684'
+for i=1,60 do
+bigfedora.CFrame=bigfedora.CFrame:lerp(CFrame.new(S.cloneRoot.Position)*CFrame.new(0,-.1,0),.09)
+S.RunService.Heartbeat:Wait()
+end
+task.wait(0.25)
+for i=1,50 do
+bigfedora.CFrame=bigfedora.CFrame:lerp(S.fedora.CFrame,.05)
+S.RunService.Heartbeat:Wait()
+end
+bigfedora:Destroy()
+for _,object in ipairs(S.clone:GetDescendants()) do
+if object:IsA("BasePart") and object.Name~="HumanoidRootPart" then
+object.Transparency=0
+elseif object:IsA("Decal") then
+object.Transparency=0
+end
+end
+S.fedora.Transparency=0
+S.shades.Transparency=0
+S.humanoid.WalkSpeed=S.originalWalkSpeed
+S.humanoid.JumpPower=S.originalJumpPower
+if S.humanoid.UseJumpPower==false then
+S.humanoid.JumpHeight=S.originalJumpHeight
+end
+end)
+S.PriorityLayers={
+Enum.AnimationPriority.Core,
+Enum.AnimationPriority.Idle,
+Enum.AnimationPriority.Movement,
+Enum.AnimationPriority.Action,
+Enum.AnimationPriority.Action2,
+Enum.AnimationPriority.Action3,
+Enum.AnimationPriority.Action4
+}
+local function SetLayer(track,layer)
+layer=math.clamp(layer,1,#S.PriorityLayers)
+track.Priority=S.PriorityLayers[layer]
+end
+local function loadAnim(id,layer)
+local anim=Instance.new("Animation")
+anim.AnimationId="http://www.roblox.com/asset/?version=1&id="..id
+local track=S.humanoid:LoadAnimation(anim)
+SetLayer(track,layer)
+track.Looped=true
+return track
+end
+S.walkAnimTrack=loadAnim("214748382",2)
+S.walkPose1=CFrame.new(0.000002,-0.171320,0.106293,0.960095,-0.000007,0.279675,0.072016,0.966285,-0.247197,-0.270244,0.257474,0.927726)
+S.walkPose2=CFrame.new(0.000002,-0.171320,0.106293,0.950258,-0.000027,-0.311463,-0.080153,0.966298,-0.244628,0.300973,0.257424,0.918231)
+S.overlayAnimTrack=loadAnim("0",2)
+S.jumpAnimTrack=loadAnim("97170520",2)
+S.jumpOverlayTrack=loadAnim("241279220",4)
+S.idleTrack1=loadAnim("289338750",2)
+S.idleTrack2=loadAnim("94853940",2)
+S.idleTrack3=loadAnim("21633130",2)
+S.idlePoseAnim1=loadAnim("233087184",3)
+S.idlePoseAnim2=loadAnim("233087184",3)
+S.idlePose1=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,0.000000,-0.000000,0.988182,-0.153285,-0.000000,0.153285,0.988182)
+S.idlePose2=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,-0.000000,0.000000,0.997943,0.064104,-0.000000,-0.064104,0.997943)
+S.isIdlePlaying=false
+S.idleCycleTime=0
+S.lastIsMoving=false
+S.pushAnim1=loadAnim("190032723",2)
+S.pushAnim2=loadAnim("183294396",2)
+S.pushPose1=CFrame.new(-0.000000,-2.142837,-0.636312,1.000000,0.000000,-0.000000,0.000000,0.233534,0.972349,-0.000000,-0.972349,0.233534)
+S.pushPose2=CFrame.new(-0.000000,-1.502041,-0.410737,1.000000,0.000000,-0.000000,-0.000000,0.421108,0.907011,-0.000000,-0.907011,0.421108)
+S.isPushingUp=false
+S.pushWeight=0
+S.pushTime=0
+S.run90Anim1=loadAnim("187951261",3)
+S.run90Anim2=loadAnim("321277423",2)
+S.isRunning90s=false
+S.run90Weight=0
+S.sine=0
+S.lol90=0
+S.shuffleAnim1=loadAnim("30196114",2)
+S.shuffleAnim2=loadAnim("187951261",3)
+S.shuffleAnim3=loadAnim("162787112",4)
+S.isShuffling=false
+S.shuffleWeight=0
+S.shuffleSine=0
+S.shuffleLoopTask=nil
+S.barrelAnim=loadAnim("165928826",2)
+S.isBarrelRolling=false
+S.barrelWeight=0
+S.barrelSine=0
+S.spinAnim1=loadAnim("60816255",3)
+S.isSpinning=false
+S.spinWeight=0
+S.recordbaby=0
+S.spinLoopTask=nil
+S.swoosherAnim1=loadAnim("56146409",3)
+S.swoosherAnim2=loadAnim("187951261",3)
+S.swoosherAnim3=loadAnim("214748382",2)
+S.isSwooshing=false
+S.swoosherWeight=0
+S.spinningmove=0
+S.slavAnim1=loadAnim("89280035",3)
+S.slavAnim2=loadAnim("180612465",2)
+S.isSlavDancing=false
+S.slavWeight=0
+S.slavTime=0
+S.slavPose1=CFrame.new(0.000000,-0.324296,-0.046137,1.000000,0.000000,0.000000,0.000000,0.975065,-0.221919,0.000000,0.221919,0.975065)
+S.slavPose2=CFrame.new(0.000000,-0.190000,0.000000,1.000000,0.000000,0.000000,0.000000,0.945746,-0.324906,0.000000,0.324906,0.945746)
+S.slavLoopTask=nil
+S.moonWalkBg1=loadAnim("241279220",3)
+S.moonWalkBg2=loadAnim("321277423",2)
+S.moonWalkExtraAnim=loadAnim("211914659",4)
+S.isMoonWalking=false
+S.moonWalkWeight=0
+S.moonWalkTime=0
+S.moonWalkLoopTask=nil
+S.activeMoonWalkTrack=nil
+S.spongeBg1=loadAnim("171967794",2)
+S.spongeBg2=loadAnim("241279220",3)
+S.spongeStepTrack=loadAnim("214748382",2)
+S.isSpongeBobDancing=false
+S.spongeWeight=0
+S.spongeTime=0
+S.spongeCFrame1=CFrame.new(0.000000,0.000000,0.000000,1.000000,0.000000,0.000000,-0.000000,0.995098,0.098890,0.000000,-0.098890,0.995098)
+S.spongeCFrame2=CFrame.new(0.233000,0.000000,0.000000,0.966554,-0.251630,-0.049556,0.256463,0.948358,0.186663,0.000027,-0.193129,0.981173)
+S.spongeCFrame3=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,0.000000,0.000000,0.995098,0.098890,0.000000,-0.098890,0.995098)
+S.spongeCFrame4=CFrame.new(-0.413000,-0.000000,0.000000,0.975469,0.220019,-0.007186,-0.211966,0.947575,0.239106,0.059417,-0.231717,0.970967)
+S.spongeTargetCFrame=S.spongeCFrame1
+S.spookyAnimTrack=loadAnim("142890086",2)
+S.spookyCFrame1=CFrame.new(0.000000,0.000000,0.000000,1.000000,0.000000,0.000000,-0.000000,0.992905,0.118913,0.000000,-0.118913,0.992905)
+S.spookyCFrame2=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,-0.000000,0.000000,0.993674,-0.112300,0.000000,0.112300,0.993674)
+S.isSpooky=false
+S.spookyWeight=0
+S.spookyTime=0
+S.spookyTargetCFrame=S.spookyCFrame1
+S.nuttyAnim1=loadAnim("190032723",3)
+S.nuttyAnim2=loadAnim("190075311",2)
+S.nuttyCFrame1=CFrame.new(0.000000,0.000000,0.000000,0.964794,-0.263008,-0.000000,0.263008,0.964794,0.000000,-0.000000,0.000000,1.000000)
+S.nuttyCFrame2=CFrame.new(0.000000,0.000000,0.000000,0.962253,0.272158,-0.000000,-0.272158,0.962253,-0.000000,-0.000000,0.000000,1.000000)
+S.isNutty=false
+S.nuttyWeight=0
+S.nuttyTime=0
+S.nuttyTargetCFrame=S.nuttyCFrame1
+S.legSwayBg1=loadAnim("188443632",2)
+S.legSwayBg2=loadAnim("321277423",2)
+S.legSwayAnim1=loadAnim("233087184",3)
+S.legSwayAnim2=loadAnim("214748382",2)
+S.legSwayCFrame1=CFrame.new(0.000000,0.000000,0.000000,1.000000,0.000000,-0.000000,0.000000,0.951500,0.307650,-0.000000,-0.307650,0.951500)
+S.legSwayCFrame2=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,0.000000,0.000000,0.941161,-0.337960,-0.000000,0.337960,0.941161)
+S.isLegSwaying=false
+S.legSwayWeight=0
+S.legSwayTime=0
+S.legSwayTargetCFrame=S.legSwayCFrame1
+S.moneyBg1=loadAnim("46333678",2)
+S.moneyBg2=loadAnim("321277423",2)
+S.moneyBg3=loadAnim("89280035",3)
+S.moneyAnimLayer4=loadAnim("167434460",4)
+S.moneyCFrame1=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,-0.000000,0.000000,0.954360,-0.298660,-0.000000,0.298660,0.954360)
+S.moneyCFrame2=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,0.000000,0.000000,0.982294,-0.187347,-0.000000,0.187347,0.982294)
+S.isMoney=false
+S.moneyWeight=0
+S.moneyTime=0
+S.moneyTargetCFrame=S.moneyCFrame1
+S.moneyLoopConn=nil
+S.moneyLauncher=nil
+S.moneyProjectileTask=nil
+S.barrelProp=nil
+S.sitBg1=loadAnim("225279725",2)
+S.sitBg2=loadAnim("106771723",2)
+S.sitBg3=loadAnim("233087184",3)
+S.sitCFrame1=CFrame.new(0.000000,-2.249000,0.000000,1.000000,-0.000000,0.000000,-0.000000,0.707266,-0.706947,0.000000,0.706947,0.707266)
+S.sitCFrame2=CFrame.new(0.000000,-2.249000,0.000000,1.000000,0.000000,0.000000,0.000000,0.772395,-0.635143,0.000000,0.635143,0.772395)
+S.isSit=false
+S.sitWeight=0
+S.sitTime=0
+S.sitTargetCFrame=S.sitCFrame1
+S.dancerAnim1=loadAnim("52155728",2)
+S.dancerAnim2=loadAnim("119810554",3)
+S.dancerCFrame1=CFrame.new(1.996000,0.000000,-0.000001,1.000000,0.000000,-0.000000,0.000000,1.000000,0.000000,-0.000000,0.000000,1.000000)
+S.dancerCFrame2=CFrame.new(0.000000,0.000000,0.000000,1.000000,-0.000000,-0.000000,-0.000000,1.000000,-0.000000,-0.000000,-0.000000,1.000000)
+S.isDancer=false
+S.dancerWeight=0
+S.dancerTime=0
+S.dancerTargetCFrame=S.dancerCFrame1
+S.jerkyBaseAnim=loadAnim("178130996",2)
+S.jerkyCFrame1=CFrame.new(-0.000000,-0.444000,0.000000,1.000000,0.000000,0.000000,-0.000000,0.853950,-0.520355,-0.000000,0.520355,0.853950)
+S.jerkyCFrame2=CFrame.new(0.000000,-0.444000,0.000000,1.000000,-0.000000,-0.000000,-0.000000,0.914445,-0.404711,-0.000000,0.404711,0.914445)
+S.isJerky=false
+S.jerkyWeight=0
+S.jerkyTime=0
+S.jerkyTargetCFrame=S.jerkyCFrame1
+S.jerkyLoopTask=nil
+S.activeJerkyTrack=nil
+S.MAX_TILT_ANGLE=10
+S.TILT_ALPHA=0.2
+S.currentMovementTilt=CFrame.new()
+S.lastStrafeSide=0
+S.strafeDebounce=0
+S.activeStrafeTrack=nil
+S.SLIDE_DISTANCE=8
+S.SLIDE_DURATION=1.5
+S.TURN_DURATION=0.6
+S.SPIN_COUNT=3
+S.currentActiveEmote=nil
+S.musicTracks = {}
+S.currentMusicDance = nil
+S.musicEnabled = true
+S.musicVolume = 0.7
+S.avatarApplyBusy = false
+
+-- Clear sounds left behind by a previous execution, then prepare the locally cached MP3s.
+local SoundService = game:GetService("SoundService")
+for _, oldSound in ipairs(SoundService:GetChildren()) do
+if oldSound:IsA("Sound") and oldSound.Name:sub(1, 13) == "KrystalMusic_" then
+pcall(function() oldSound:Stop() oldSound:Destroy() end)
+end
+end
+
+local customAssetGetter
+if type(getcustomasset) == "function" then
+customAssetGetter = getcustomasset
+elseif type(getsynasset) == "function" then
+customAssetGetter = getsynasset
+end
+
+if customAssetGetter then
+for _, musicInfo in ipairs(KRYSTAL_MUSIC_CONFIG) do
+local localPath = KRYSTAL_MUSIC_PATHS[musicInfo.dance]
+if localPath then
+local assetId
+local candidates = {localPath, "./" .. localPath}
+for _, candidate in ipairs(candidates) do
+local assetOk, result = pcall(customAssetGetter, candidate)
+if assetOk and type(result) == "string" and result ~= "" then
+assetId = result
+break
+end
+end
+if assetId then
+local sound = Instance.new("Sound")
+sound.Name = "KrystalMusic_" .. musicInfo.keyLabel
+sound.SoundId = assetId
+sound.Volume = S.musicVolume
+sound.Looped = true
+sound.PlaybackSpeed = 1
+sound.Parent = SoundService
+S.musicTracks[musicInfo.dance] = sound
+end
+end
+end
+end
+
+local stopMusic
+stopMusic = function()
+for _, sound in pairs(S.musicTracks) do
+pcall(function() sound:Stop() end)
+end
+S.currentMusicDance = nil
+end
+
+local function playMusicForEmote(emoteName)
+if not S.musicEnabled then
+if stopMusic then stopMusic() end
+return
+end
+local sound = S.musicTracks[emoteName]
+if not sound then
+S.currentMusicDance = nil
+return
+end
+for _, otherSound in pairs(S.musicTracks) do
+if otherSound ~= sound then
+pcall(function() otherSound:Stop() end)
+end
+end
+pcall(function()
+sound:Stop()
+sound.TimePosition = 0
+sound.Looped = true
+sound:Play()
+S.currentMusicDance = emoteName
+end)
+end
+
+local function updateMusicVolume()
+for _, sound in pairs(S.musicTracks) do
+pcall(function() sound.Volume = S.musicVolume end)
+end
+end
+
+local KrystalDebris = game:GetService("Debris")
+local function makeWeldedMeshPart(partName, meshId, textureId, meshScale, parentPart, targetPart, startCFrame, weldOffset)
+    if not parentPart or not targetPart then return nil end
+    local part = Instance.new("Part")
+    part.Name = partName
+    part.Size = Vector3.new(1, 1, 1)
+    part.CFrame = startCFrame or targetPart.CFrame
+    part.Transparency = 0
+    part.CanCollide = false
+    part.CanTouch = false
+    part.CanQuery = false
+    part.Massless = true
+    part.Anchored = false
+    part.Parent = parentPart
+
+    local mesh = Instance.new("SpecialMesh")
+    mesh.MeshType = Enum.MeshType.FileMesh
+    mesh.MeshId = "rbxassetid://" .. tostring(meshId)
+    mesh.TextureId = "rbxassetid://" .. tostring(textureId)
+    mesh.Scale = meshScale
+    mesh.Parent = part
+
+    local weld = Instance.new("Weld")
+    weld.Name = "KrystalMeshWeld"
+    weld.Part0 = part
+    weld.Part1 = targetPart
+    weld.C0 = weldOffset or CFrame.new()
+    weld.C1 = CFrame.new()
+    weld.Parent = part
+    return part
+end
+
+local function removeMoneyLauncher()
+    if S.moneyLauncher then
+        pcall(function() S.moneyLauncher:Destroy() end)
+        S.moneyLauncher = nil
+    end
+    if S.moneyProjectileTask then
+        pcall(function() task.cancel(S.moneyProjectileTask) end)
+        S.moneyProjectileTask = nil
+    end
+end
+
+local function createMoneyLauncherAndShoot()
+    local clone = S.clone
+    local torso = clone and clone:FindFirstChild("Torso")
+    local leftArm = clone and clone:FindFirstChild("Left Arm")
+    if not torso then
+        warn("Krystal Dance: Money launcher could not find the visible R6 torso.")
+        return
+    end
+
+    removeMoneyLauncher()
+    local attachTo = leftArm or torso
+    local initialCFrame = attachTo.CFrame * CFrame.new(0, -0.25, -0.55) * CFrame.Angles(math.rad(-90), 0, 0)
+    local weldOffset = initialCFrame:Inverse() * attachTo.CFrame
+    S.moneyLauncher = makeWeldedMeshPart(
+        "KrystalMoneyLauncher", 1285245, 8587344, Vector3.new(0.85, 0.85, 0.85),
+        attachTo, attachTo, initialCFrame, weldOffset
+    )
+    if S.moneyLauncher then
+        S.moneyLauncher.CanCollide = false
+        S.moneyLauncher.CanTouch = false
+        S.moneyLauncher.CanQuery = false
+        S.moneyLauncher.Massless = true
+    end
+    if not S.moneyLauncher then return end
+
+    S.moneyProjectileTask = task.spawn(function()
+        while S.isMoney and S.moneyLauncher and S.moneyLauncher.Parent do
+            local launcher = S.moneyLauncher
+            local projectile = Instance.new("Part")
+            projectile.Name = "KrystalMoneyProjectile"
+            projectile.Size = Vector3.new(1, 1, 1)
+            local visibleRoot = clone and clone:FindFirstChild("HumanoidRootPart")
+            local shootDirection = (visibleRoot and visibleRoot.CFrame.LookVector) or launcher.CFrame.LookVector
+            if shootDirection.Magnitude < 0.001 then
+                shootDirection = Vector3.new(0, 0, -1)
+            else
+                shootDirection = shootDirection.Unit
+            end
+            local spawnPosition = launcher.Position + shootDirection * 0.8
+            projectile.CFrame = CFrame.lookAt(spawnPosition, spawnPosition + shootDirection)
+            projectile.Anchored = false
+            projectile.CanCollide = true
+            projectile.CanTouch = true
+            projectile.CanQuery = true
+            projectile.Massless = false
+            pcall(function() projectile.CollisionGroup = S.MONEY_PROJECTILE_GROUP end)
+            projectile.Parent = workspace
+
+            local moneyMesh = Instance.new("SpecialMesh")
+            moneyMesh.MeshType = Enum.MeshType.FileMesh
+            moneyMesh.Scale = Vector3.new(1.25, 1.25, 1.25)
+            moneyMesh.MeshId = "rbxassetid://667285348"
+            moneyMesh.TextureId = "rbxassetid://665939136"
+            moneyMesh.Parent = projectile
+
+            local velocity = Instance.new("BodyVelocity")
+            velocity.Name = "KrystalMoneyLaunchVelocity"
+            velocity.MaxForce = Vector3.new(99999, 99999, 99999)
+            velocity.Velocity = shootDirection * 45
+            velocity.Parent = projectile
+            KrystalDebris:AddItem(velocity, 0.1)
+            KrystalDebris:AddItem(projectile, 4)
+
+            task.wait(0.35)
+        end
+        S.moneyProjectileTask = nil
+    end)
+end
+
+local function createBarrelRollProp()
+    local clone = S.clone
+    local torso = clone and clone:FindFirstChild("Torso")
+    if not torso then return end
+    if S.barrelProp then
+        pcall(function() S.barrelProp:Destroy() end)
+        S.barrelProp = nil
+    end
+    local torsoCFrame = torso.CFrame
+    local lowerBarrelCFrame = torsoCFrame * CFrame.new(0, -0.35, 0)
+    S.barrelProp = makeWeldedMeshPart(
+        "KrystalBarrelRollProp", 29873142, 31082268, Vector3.new(1.05, 0.95, 1.05),
+        torso, torso, lowerBarrelCFrame, lowerBarrelCFrame:Inverse() * torsoCFrame
+    )
+end
+
+local function removeBarrelRollProp()
+    if S.barrelProp then
+        pcall(function() S.barrelProp:Destroy() end)
+        S.barrelProp = nil
+    end
+end
+
+local function stopAllEmotes()
+S.isPushingUp=false
+S.isRunning90s=false
+S.isShuffling=false
+S.isBarrelRolling=false
+S.isSpinning=false
+S.isSwooshing=false
+S.isSlavDancing=false
+S.isMoonWalking=false
+S.isSpongeBobDancing=false
+S.isSpooky=false
+S.isNutty=false
+S.isLegSwaying=false
+S.isMoney=false
+S.isSit=false
+S.isDancer=false
+S.isJerky=false
+S.currentActiveEmote=nil
+removeMoneyLauncher()
+removeBarrelRollProp()
+if S.moneyLoopConn then
+S.moneyLoopConn:Disconnect()
+S.moneyLoopConn=nil
+end
+if S.shuffleLoopTask then
+task.cancel(S.shuffleLoopTask)
+S.shuffleLoopTask=nil
+end
+if S.spinLoopTask then
+task.cancel(S.spinLoopTask)
+S.spinLoopTask=nil
+end
+if S.slavLoopTask then
+task.cancel(S.slavLoopTask)
+S.slavLoopTask=nil
+end
+if S.moonWalkLoopTask then
+task.cancel(S.moonWalkLoopTask)
+S.moonWalkLoopTask=nil
+end
+if S.jerkyLoopTask then
+task.cancel(S.jerkyLoopTask)
+S.jerkyLoopTask=nil
+end
+if S.activeMoonWalkTrack then
+S.activeMoonWalkTrack:Stop(0.3)
+S.activeMoonWalkTrack=nil
+end
+if S.activeJerkyTrack then
+S.activeJerkyTrack:Stop(0.3)
+S.activeJerkyTrack=nil
+end
+if S.activeStrafeTrack then
+S.activeStrafeTrack:Stop(0.2)
+S.activeStrafeTrack=nil
+end
+S.pushAnim1:Stop(0.3)
+S.pushAnim2:Stop(0.3)
+S.run90Anim1:Stop(0.3)
+S.run90Anim2:Stop(0.3)
+S.shuffleAnim1:Stop(0.3)
+S.shuffleAnim2:Stop(0.3)
+S.shuffleAnim3:Stop(0.3)
+S.barrelAnim:Stop(0.3)
+S.spinAnim1:Stop(0.3)
+S.swoosherAnim1:Stop(0.3)
+S.swoosherAnim2:Stop(0.3)
+S.swoosherAnim3:Stop(0.3)
+S.slavAnim1:Stop(0.3)
+S.slavAnim2:Stop(0.3)
+S.moonWalkBg1:Stop(0.3)
+S.moonWalkBg2:Stop(0.3)
+S.spongeBg1:Stop(0.3)
+S.spongeBg2:Stop(0.3)
+S.spongeStepTrack:Stop(0.3)
+S.spookyAnimTrack:Stop(0.3)
+S.nuttyAnim1:Stop(0.3)
+S.nuttyAnim2:Stop(0.3)
+S.legSwayBg1:Stop(0.3)
+S.legSwayBg2:Stop(0.3)
+S.legSwayAnim1:Stop(0.3)
+S.legSwayAnim2:Stop(0.3)
+S.moneyBg1:Stop(0.3)
+S.moneyBg2:Stop(0.3)
+S.moneyBg3:Stop(0.3)
+S.moneyAnimLayer4:Stop(0.3)
+S.sitBg1:Stop(0.3)
+S.sitBg2:Stop(0.3)
+S.sitBg3:Stop(0.3)
+S.dancerAnim1:Stop(0.3)
+S.dancerAnim2:Stop(0.3)
+S.jerkyBaseAnim:Stop(0.3)
+S.moonWalkExtraAnim:Stop(0.3)
+if stopMusic then stopMusic() end
+end
+local function playEmote(emoteName)
+if S.currentActiveEmote==emoteName then
+stopAllEmotes()
+return
+end
+stopAllEmotes()
+S.currentActiveEmote=emoteName
+playMusicForEmote(emoteName)
+if emoteName=="Push up" then
+S.isPushingUp=true
+S.pushTime=0
+S.pushAnim1:Play(0.3)
+S.pushAnim1.TimePosition=0.1
+S.pushAnim1:AdjustSpeed(0)
+S.pushAnim2:Play(0.3)
+S.pushAnim2.TimePosition=0.1
+S.pushAnim2:AdjustSpeed(0)
+elseif emoteName=="running in the 90's" then
+S.isRunning90s=true
+S.sine=0
+S.lol90=0
+S.run90Anim1:Play(0.3)
+S.run90Anim1.TimePosition=0.1
+S.run90Anim1:AdjustSpeed(0)
+S.run90Anim2:Play(0.3)
+S.run90Anim2.TimePosition=0.1
+S.run90Anim2:AdjustSpeed(0)
+elseif emoteName=="The shuffle" then
+S.isShuffling=true
+S.shuffleSine=0
+S.shuffleAnim1:Play(0.3)
+S.shuffleAnim1.TimePosition=11
+S.shuffleAnim1:AdjustSpeed(0)
+S.shuffleAnim2:Play(0.3)
+S.shuffleAnim2.TimePosition=0.1
+S.shuffleAnim2:AdjustSpeed(0)
+S.shuffleAnim3:Play(0.3)
+S.shuffleAnim3.TimePosition=1
+S.shuffleAnim3:AdjustSpeed(0)
+S.shuffleLoopTask=task.spawn(function()
+while S.isShuffling do
+local seqTrack1=loadAnim("214748382",2)
+seqTrack1:Play(0.3)
+seqTrack1.TimePosition=0
+seqTrack1:AdjustSpeed(0)
+task.delay(0.5,function()
+if seqTrack1 then seqTrack1:Stop(0.3) end
+end)
+task.wait(0.5)
+if not S.isShuffling then break end
+local seqTrack2=loadAnim("214748382",2)
+seqTrack2:Play(0.3)
+seqTrack2.TimePosition=0.35
+seqTrack2:AdjustSpeed(0)
+task.delay(0.5,function()
+if seqTrack2 then seqTrack2:Stop(0.3) end
+end)
+task.wait(0.5)
+end
+end)
+elseif emoteName=="barrel roll" then
+S.isBarrelRolling=true
+S.barrelSine=0
+createBarrelRollProp()
+S.barrelAnim:Play(0.3)
+S.barrelAnim.TimePosition=0.1
+S.barrelAnim:AdjustSpeed(0)
+elseif emoteName=="You Spin Me" then
+S.isSpinning=true
+S.sine=0
+S.recordbaby=0
+S.spinAnim1:Play(0.3)
+S.spinAnim1.TimePosition=0.3
+S.spinAnim1:AdjustSpeed(0)
+S.spinLoopTask=task.spawn(function()
+local interval=0.8/1.5
+while S.isSpinning do
+local seqTrack1=loadAnim("52155728",2)
+seqTrack1:Play(0.3)
+seqTrack1.TimePosition=1.5
+seqTrack1:AdjustSpeed(0)
+task.delay(interval,function()
+if seqTrack1 then seqTrack1:Stop(0.3) end
+end)
+task.wait(interval)
+if not S.isSpinning then break end
+local seqTrack2=loadAnim("52155728",2)
+seqTrack2:Play(0.3)
+seqTrack2.TimePosition=2.9
+seqTrack2:AdjustSpeed(0)
+task.delay(interval,function()
+if seqTrack2 then seqTrack2:Stop(0.3) end
+end)
+task.wait(interval)
+end
+end)
+elseif emoteName=="The Swoosher" then
+S.isSwooshing=true
+S.sine=0
+S.spinningmove=0
+S.swoosherAnim1:Play(0.3)
+S.swoosherAnim1.TimePosition=0.6
+S.swoosherAnim1:AdjustSpeed(0)
+S.swoosherAnim2:Play(0.3)
+S.swoosherAnim2.TimePosition=0.3
+S.swoosherAnim2:AdjustSpeed(0)
+S.swoosherAnim3:Play(0.3)
+S.swoosherAnim3.TimePosition=0.08
+S.swoosherAnim3:AdjustSpeed(0)
+elseif emoteName=="Slav Dance" then
+S.isSlavDancing=true
+S.slavTime=0
+S.slavAnim1:Play(0.3)
+S.slavAnim1.TimePosition=0.1
+S.slavAnim1:AdjustSpeed(0)
+S.slavAnim2:Play(0.3)
+S.slavAnim2.TimePosition=0.1
+S.slavAnim2:AdjustSpeed(0)
+S.slavLoopTask=task.spawn(function()
+while S.isSlavDancing do
+local seqTrack1=loadAnim("60883237",2)
+seqTrack1:Play(0.3)
+seqTrack1.TimePosition=0.25
+seqTrack1:AdjustSpeed(0)
+task.delay(0.5,function()
+if seqTrack1 then seqTrack1:Stop(0.3) end
+end)
+task.wait(0.5)
+if not S.isSlavDancing then break end
+local seqTrack2=loadAnim("60883237",2)
+seqTrack2:Play(0.3)
+seqTrack2.TimePosition=0.55
+seqTrack2:AdjustSpeed(0)
+task.delay(0.5,function()
+if seqTrack2 then seqTrack2:Stop(0.3) end
+end)
+task.wait(0.5)
+end
+end)
+elseif emoteName=="Moon Walk" then
+S.isMoonWalking=true
+S.moonWalkTime=0
+S.moonWalkBg1:Play(0.3)
+S.moonWalkBg1.TimePosition=0.3
+S.moonWalkBg1:AdjustSpeed(0)
+S.moonWalkBg2:Play(0.3)
+S.moonWalkBg2.TimePosition=0.1
+S.moonWalkBg2:AdjustSpeed(0)
+S.moonWalkLoopTask=task.spawn(function()
+while S.isMoonWalking do
+local stepTrack=loadAnim("214748382",2)
+S.activeMoonWalkTrack=stepTrack
+stepTrack:Play(0.3)
+stepTrack:AdjustSpeed(0)
+local elapsed=0
+while elapsed<1 and S.isMoonWalking do
+local dt=S.RunService.Heartbeat:Wait()
+elapsed=elapsed+dt
+local alpha=math.clamp(elapsed/1,0,1)
+local smoothedAlpha=(1-math.cos(alpha*math.pi))/2
+stepTrack.TimePosition=smoothedAlpha*0.3
+end
+if not S.isMoonWalking then
+stepTrack:Stop(0.3)
+S.activeMoonWalkTrack=nil
+break
+end
+elapsed=0
+while elapsed<1 and S.isMoonWalking do
+local dt=S.RunService.Heartbeat:Wait()
+elapsed=elapsed+dt
+local alpha=math.clamp(elapsed/1,0,1)
+local smoothedAlpha=(1-math.cos(alpha*math.pi))/2
+stepTrack.TimePosition=(1-smoothedAlpha)*0.3
+end
+stepTrack:Stop(0.3)
+S.activeMoonWalkTrack=nil
+if not S.isMoonWalking then break end
+end
+end)
+elseif emoteName=="SpongeBob Dance" then
+S.isSpongeBobDancing=true
+S.spongeTime=0
+S.spongeBg1:Play(0.3)
+S.spongeBg1.TimePosition=0.1
+S.spongeBg1:AdjustSpeed(0)
+S.spongeBg2:Play(0.3)
+S.spongeBg2.TimePosition=0.1
+S.spongeBg2:AdjustSpeed(0)
+S.spongeStepTrack:Play(0.3)
+S.spongeStepTrack.TimePosition=0
+S.spongeStepTrack:AdjustSpeed(0)
+elseif emoteName=="Spooky" then
+S.isSpooky=true
+S.spookyTime=0
+S.spookyAnimTrack:Play(0.3)
+S.spookyAnimTrack.TimePosition=0.25
+S.spookyAnimTrack:AdjustSpeed(0)
+elseif emoteName=="The Nutty" then
+S.isNutty=true
+S.nuttyTime=0
+S.nuttyAnim1:Play(0.3)
+S.nuttyAnim1.TimePosition=0
+S.nuttyAnim1:AdjustSpeed(0)
+S.nuttyAnim2:Play(0.3)
+S.nuttyAnim2.TimePosition=0.2
+S.nuttyAnim2:AdjustSpeed(0)
+elseif emoteName=="leg sway" then
+S.isLegSwaying=true
+S.legSwayTime=0
+S.legSwayBg1:Play(0.3)
+S.legSwayBg1.TimePosition=0.1
+S.legSwayBg1:AdjustSpeed(0)
+S.legSwayBg2:Play(0.3)
+S.legSwayBg2.TimePosition=0.1
+S.legSwayBg2:AdjustSpeed(0)
+S.legSwayAnim1:Play(0.3)
+S.legSwayAnim1.TimePosition=0.8
+S.legSwayAnim1:AdjustSpeed(0)
+S.legSwayAnim2:Play(0.3)
+S.legSwayAnim2.TimePosition=0.35
+S.legSwayAnim2:AdjustSpeed(0)
+elseif emoteName=="Here comes the money" then
+S.isMoney=true
+S.moneyTime=0
+createMoneyLauncherAndShoot()
+S.moneyBg1:Play(0.3)
+S.moneyBg1.TimePosition=0
+S.moneyBg1:AdjustSpeed(1.4)
+S.moneyLoopConn=S.moneyBg1.Stopped:Connect(function()
+if S.isMoney then
+S.moneyBg1:Play(0)
+S.moneyBg1.TimePosition=0
+S.moneyBg1:AdjustSpeed(1.4)
+end
+end)
+S.moneyBg2:Play(0.3)
+S.moneyBg2.TimePosition=0
+S.moneyBg2:AdjustSpeed(0)
+S.moneyBg3:Play(0.3)
+S.moneyBg3.TimePosition=0.1
+S.moneyBg3:AdjustSpeed(0)
+S.moneyAnimLayer4:Play(0.3)
+S.moneyAnimLayer4.TimePosition=0
+S.moneyAnimLayer4:AdjustSpeed(0)
+elseif emoteName=="sit" then
+S.isSit=true
+S.sitTime=0
+S.sitBg1:Play(0.3)
+S.sitBg1.TimePosition=0.1
+S.sitBg1:AdjustSpeed(0)
+S.sitBg2:Play(0.3)
+S.sitBg2.TimePosition=0.1
+S.sitBg2:AdjustSpeed(0)
+S.sitBg3:Play(0.3)
+S.sitBg3.TimePosition=0.1
+S.sitBg3:AdjustSpeed(0)
+elseif emoteName=="Dancer" then
+S.isDancer=true
+S.dancerTime=0
+S.dancerAnim1:Play(0.3)
+S.dancerAnim1.TimePosition=1.5
+S.dancerAnim1:AdjustSpeed(0)
+S.dancerAnim2:Play(0.3)
+S.dancerAnim2.TimePosition=0.4
+S.dancerAnim2:AdjustSpeed(0)
+elseif emoteName=="The Jerky" then
+S.isJerky=true
+S.jerkyTime=0
+S.jerkyBaseAnim:Play(0.3)
+S.jerkyBaseAnim.TimePosition=0.1
+S.jerkyBaseAnim:AdjustSpeed(0)
+S.jerkyLoopTask=task.spawn(function()
+while S.isJerky do
+local stepTrack=loadAnim("214748382",2)
+S.activeJerkyTrack=stepTrack
+stepTrack:Play(0.1)
+stepTrack:AdjustSpeed(0)
+local elapsed=0
+while elapsed<0.5 and S.isJerky do
+local dt=S.RunService.Heartbeat:Wait()
+elapsed=elapsed+dt
+local alpha=math.clamp(elapsed/0.5,0,1)
+local smoothedAlpha=(1-math.cos(alpha*math.pi))/2
+stepTrack.TimePosition=smoothedAlpha*0.3
+end
+if not S.isJerky then
+stepTrack:Stop(0.3)
+S.activeJerkyTrack=nil
+break
+end
+elapsed=0
+while elapsed<0.5 and S.isJerky do
+local dt=S.RunService.Heartbeat:Wait()
+elapsed=elapsed+dt
+local alpha=math.clamp(elapsed/0.5,0,1)
+local smoothedAlpha=(1-math.cos(alpha*math.pi))/2
+stepTrack.TimePosition=(1-smoothedAlpha)*0.3
+end
+stepTrack:Stop(0.3)
+S.activeJerkyTrack=nil
+if not S.isJerky then break end
+end
+end)
+end
+end
+S.EMOTES={"Push up","running in the 90's","The shuffle","barrel roll","You Spin Me","The Swoosher","Slav Dance","Moon Walk","SpongeBob Dance","Spooky","The Nutty","leg sway","Here comes the money","sit","Dancer","The Jerky"}
+S.GUI_NAME="EmoteGui"
+S.BG_COLOR=Color3.fromRGB(0,0,0)
+S.BG_TRANSPARENCY=0.1
+S.BUTTON_COLOR=Color3.fromRGB(20,20,20)
+S.STROKE_COLOR=Color3.fromRGB(70,70,70)
+S.TEXT_COLOR=Color3.fromRGB(255,255,255)
+S.TEXT_SIZE=18
+S.CORNER_RADIUS=8
+S.TOGGLE_SIZE=48
+S.PANEL_WIDTH=180
+S.PANEL_HEIGHT=410
+S.BUTTON_HEIGHT=40
+S.EDGE_PADDING=10
+S.START_OPEN=false
+local function style(obj)
+local corner=Instance.new("UICorner")
+corner.CornerRadius=UDim.new(0,S.CORNER_RADIUS)
+corner.Parent=obj
+local stroke=Instance.new("UIStroke")
+stroke.Color=S.STROKE_COLOR
+stroke.Thickness=1
+stroke.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+stroke.Parent=obj
+end
+local function buildGui()
+if S.playerGui:FindFirstChild(S.GUI_NAME) then
+S.playerGui[S.GUI_NAME]:Destroy()
+end
+local gui=Instance.new("ScreenGui")
+gui.Name=S.GUI_NAME
+gui.ResetOnSpawn=false
+gui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+gui.Parent=S.playerGui
+local toggle=Instance.new("TextButton")
+toggle.Size=UDim2.fromOffset(S.TOGGLE_SIZE,S.TOGGLE_SIZE)
+toggle.AnchorPoint=Vector2.new(0,0.5)
+toggle.Position=UDim2.new(0,S.EDGE_PADDING,0.5,0)
+toggle.BackgroundColor3=S.BG_COLOR
+toggle.BackgroundTransparency=S.BG_TRANSPARENCY
+toggle.Text="☺"
+toggle.TextColor3=S.TEXT_COLOR
+toggle.TextSize=26
+toggle.AutoButtonColor=true
+toggle.Parent=gui
+style(toggle)
+local panel=Instance.new("Frame")
+panel.Size=UDim2.fromOffset(S.PANEL_WIDTH,S.PANEL_HEIGHT)
+panel.AnchorPoint=Vector2.new(0,0.5)
+panel.Position=UDim2.new(0,S.EDGE_PADDING*2+S.TOGGLE_SIZE,0.5,0)
+panel.BackgroundColor3=S.BG_COLOR
+panel.BackgroundTransparency=S.BG_TRANSPARENCY
+panel.Visible=S.START_OPEN
+panel.Parent=gui
+style(panel)
+local keyHint=Instance.new("TextLabel")
+keyHint.Name="KeybindHint"
+keyHint.BackgroundTransparency=1
+keyHint.Position=UDim2.fromOffset(8,5)
+keyHint.Size=UDim2.new(1,-72,0,19)
+keyHint.Font=Enum.Font.GothamBold
+keyHint.Text="Dances"
+keyHint.TextColor3=Color3.fromRGB(205,180,255)
+keyHint.TextSize=8
+keyHint.TextXAlignment=Enum.TextXAlignment.Center
+keyHint.Parent=panel
+local scroll=Instance.new("ScrollingFrame")
+scroll.Size=UDim2.new(1,-16,1,-38)
+scroll.Position=UDim2.fromOffset(8,30)
+scroll.BackgroundTransparency=1
+scroll.BorderSizePixel=0
+scroll.ScrollBarThickness=4
+scroll.ScrollBarImageColor3=S.STROKE_COLOR
+scroll.CanvasSize=UDim2.new()
+scroll.AutomaticCanvasSize=Enum.AutomaticSize.Y
+scroll.ScrollingDirection=Enum.ScrollingDirection.Y
+scroll.Parent=panel
+local layout=Instance.new("UIListLayout")
+layout.Padding=UDim.new(0,6)
+layout.SortOrder=Enum.SortOrder.LayoutOrder
+layout.Parent=scroll
+for i,name in ipairs(S.EMOTES) do
+local btn=Instance.new("TextButton")
+btn.LayoutOrder=i
+btn.Size=UDim2.new(1,-8,0,S.BUTTON_HEIGHT)
+btn.BackgroundColor3=S.BUTTON_COLOR
+btn.Text=name
+btn.TextSize=S.TEXT_SIZE
+for _, keyInfo in ipairs(KRYSTAL_DANCE_KEYBINDS) do
+if keyInfo.dance==name then
+btn.Text=name .. "  [" .. keyInfo.keyLabel .. "]"
+btn.TextSize=15
+break
+end
+end
+btn.TextColor3=S.TEXT_COLOR
+btn.Font=Enum.Font.GothamMedium
+btn.AutoButtonColor=true
+btn.Parent=scroll
+style(btn)
+btn.Activated:Connect(function()
+if S.humanoid.Health>0 then
+playEmote(name)
+end
+end)
+end
+local settingsButton=Instance.new("TextButton")
+settingsButton.Name="SettingsButton"
+settingsButton.Size=UDim2.fromOffset(58,20)
+settingsButton.Position=UDim2.new(1,-66,0,3)
+settingsButton.BackgroundColor3=S.BUTTON_COLOR
+settingsButton.Text="Settings"
+settingsButton.TextColor3=S.TEXT_COLOR
+settingsButton.Font=Enum.Font.GothamBold
+settingsButton.TextSize=10
+settingsButton.Parent=panel
+style(settingsButton)
+
+local settingsPanel=Instance.new("Frame")
+settingsPanel.Name="SettingsPanel"
+settingsPanel.Size=UDim2.fromOffset(290,260)
+settingsPanel.AnchorPoint=Vector2.new(0,0.5)
+settingsPanel.Position=UDim2.new(0,S.EDGE_PADDING*2+S.TOGGLE_SIZE+S.PANEL_WIDTH+12,0.5,0)
+settingsPanel.BackgroundColor3=S.BG_COLOR
+settingsPanel.BackgroundTransparency=S.BG_TRANSPARENCY
+settingsPanel.Visible=false
+settingsPanel.Parent=gui
+style(settingsPanel)
+
+local settingsTitle=Instance.new("TextLabel")
+settingsTitle.BackgroundTransparency=1
+settingsTitle.Position=UDim2.fromOffset(12,8)
+settingsTitle.Size=UDim2.new(1,-52,0,22)
+settingsTitle.Font=Enum.Font.GothamBold
+settingsTitle.Text="KRYSTAL SETTINGS"
+settingsTitle.TextColor3=Color3.fromRGB(218,194,255)
+settingsTitle.TextSize=14
+settingsTitle.TextXAlignment=Enum.TextXAlignment.Left
+settingsTitle.Parent=settingsPanel
+
+local closeSettings=Instance.new("TextButton")
+closeSettings.Size=UDim2.fromOffset(24,22)
+closeSettings.Position=UDim2.new(1,-34,0,7)
+closeSettings.BackgroundColor3=S.BUTTON_COLOR
+closeSettings.Text="X"
+closeSettings.TextColor3=S.TEXT_COLOR
+closeSettings.Font=Enum.Font.GothamBold
+closeSettings.TextSize=12
+closeSettings.Parent=settingsPanel
+style(closeSettings)
+
+local musicToggle=Instance.new("TextButton")
+musicToggle.Size=UDim2.fromOffset(108,28)
+musicToggle.Position=UDim2.fromOffset(12,40)
+musicToggle.BackgroundColor3=S.BUTTON_COLOR
+musicToggle.TextColor3=S.TEXT_COLOR
+musicToggle.Font=Enum.Font.GothamMedium
+musicToggle.TextSize=12
+musicToggle.Parent=settingsPanel
+style(musicToggle)
+
+local volumeLabel=Instance.new("TextLabel")
+volumeLabel.BackgroundTransparency=1
+volumeLabel.Position=UDim2.fromOffset(128,40)
+volumeLabel.Size=UDim2.fromOffset(150,28)
+volumeLabel.Font=Enum.Font.GothamMedium
+volumeLabel.TextColor3=S.TEXT_COLOR
+volumeLabel.TextSize=12
+volumeLabel.TextXAlignment=Enum.TextXAlignment.Left
+volumeLabel.Parent=settingsPanel
+
+local volumeDown=Instance.new("TextButton")
+volumeDown.Size=UDim2.fromOffset(34,28)
+volumeDown.Position=UDim2.fromOffset(12,75)
+volumeDown.BackgroundColor3=S.BUTTON_COLOR
+volumeDown.Text="−"
+volumeDown.TextColor3=S.TEXT_COLOR
+volumeDown.Font=Enum.Font.GothamBold
+volumeDown.TextSize=19
+volumeDown.Parent=settingsPanel
+style(volumeDown)
+
+local volumeTrack=Instance.new("TextLabel")
+volumeTrack.BackgroundTransparency=1
+volumeTrack.Position=UDim2.fromOffset(52,75)
+volumeTrack.Size=UDim2.fromOffset(180,28)
+volumeTrack.Font=Enum.Font.Gotham
+volumeTrack.Text="Use − / + to adjust"
+volumeTrack.TextColor3=Color3.fromRGB(190,185,205)
+volumeTrack.TextSize=11
+volumeTrack.Parent=settingsPanel
+
+local volumeUp=Instance.new("TextButton")
+volumeUp.Size=UDim2.fromOffset(34,28)
+volumeUp.Position=UDim2.fromOffset(244,75)
+volumeUp.BackgroundColor3=S.BUTTON_COLOR
+volumeUp.Text="+"
+volumeUp.TextColor3=S.TEXT_COLOR
+volumeUp.Font=Enum.Font.GothamBold
+volumeUp.TextSize=19
+volumeUp.Parent=settingsPanel
+style(volumeUp)
+
+local avatarLabel=Instance.new("TextLabel")
+avatarLabel.BackgroundTransparency=1
+avatarLabel.Position=UDim2.fromOffset(12,112)
+avatarLabel.Size=UDim2.new(1,-24,0,18)
+avatarLabel.Font=Enum.Font.GothamBold
+avatarLabel.Text="CHANGE VISIBLE AVATAR"
+avatarLabel.TextColor3=Color3.fromRGB(218,194,255)
+avatarLabel.TextSize=11
+avatarLabel.TextXAlignment=Enum.TextXAlignment.Left
+avatarLabel.Parent=settingsPanel
+
+local avatarBox=Instance.new("TextBox")
+avatarBox.Name="AvatarUserId"
+avatarBox.Size=UDim2.fromOffset(176,30)
+avatarBox.Position=UDim2.fromOffset(12,134)
+avatarBox.BackgroundColor3=S.BUTTON_COLOR
+avatarBox.TextColor3=S.TEXT_COLOR
+avatarBox.PlaceholderColor3=Color3.fromRGB(155,150,170)
+avatarBox.PlaceholderText="Roblox user ID"
+avatarBox.Text=""
+avatarBox.ClearTextOnFocus=false
+avatarBox.Font=Enum.Font.Gotham
+avatarBox.TextSize=12
+avatarBox.Parent=settingsPanel
+style(avatarBox)
+
+local applyAvatar=Instance.new("TextButton")
+applyAvatar.Size=UDim2.fromOffset(82,30)
+applyAvatar.Position=UDim2.fromOffset(196,134)
+applyAvatar.BackgroundColor3=S.BUTTON_COLOR
+applyAvatar.Text="Apply"
+applyAvatar.TextColor3=S.TEXT_COLOR
+applyAvatar.Font=Enum.Font.GothamBold
+applyAvatar.TextSize=12
+applyAvatar.Parent=settingsPanel
+style(applyAvatar)
+
+local avatarStatus=Instance.new("TextLabel")
+avatarStatus.BackgroundTransparency=1
+avatarStatus.Position=UDim2.fromOffset(12,171)
+avatarStatus.Size=UDim2.new(1,-24,0,76)
+avatarStatus.Font=Enum.Font.Gotham
+avatarStatus.Text="Enter a Roblox user ID to change the visible clone's avatar."
+avatarStatus.TextColor3=Color3.fromRGB(190,185,205)
+avatarStatus.TextSize=11
+avatarStatus.TextWrapped=true
+avatarStatus.TextXAlignment=Enum.TextXAlignment.Left
+avatarStatus.TextYAlignment=Enum.TextYAlignment.Top
+avatarStatus.Parent=settingsPanel
+
+local function refreshSettingsLabels()
+musicToggle.Text=S.musicEnabled and "Music: ON" or "Music: OFF"
+volumeLabel.Text="Volume: "..tostring(math.floor(S.musicVolume*100+0.5)).."%"
+end
+refreshSettingsLabels()
+
+musicToggle.Activated:Connect(function()
+S.musicEnabled=not S.musicEnabled
+if not S.musicEnabled then
+if stopMusic then stopMusic() end
+elseif S.currentActiveEmote then
+playMusicForEmote(S.currentActiveEmote)
+end
+refreshSettingsLabels()
+end)
+
+volumeDown.Activated:Connect(function()
+S.musicVolume=math.clamp(math.floor((S.musicVolume-0.1)*100+0.5)/100,0,1)
+updateMusicVolume()
+refreshSettingsLabels()
+end)
+
+volumeUp.Activated:Connect(function()
+S.musicVolume=math.clamp(math.floor((S.musicVolume+0.1)*100+0.5)/100,0,1)
+updateMusicVolume()
+refreshSettingsLabels()
+end)
+
+settingsButton.Activated:Connect(function()
+settingsPanel.Visible=not settingsPanel.Visible
+end)
+closeSettings.Activated:Connect(function()
+settingsPanel.Visible=false
+end)
+
+applyAvatar.Activated:Connect(function()
+if S.avatarApplyBusy then return end
+local userId=tonumber(avatarBox.Text)
+if not userId or userId<1 or userId%1~=0 then
+avatarStatus.Text="Enter a valid numeric Roblox user ID."
+return
+end
+S.avatarApplyBusy=true
+applyAvatar.Text="Loading..."
+avatarStatus.Text="Loading avatar appearance..."
+task.spawn(function()
+local gotDescription,description=pcall(function()
+return S.Players:GetHumanoidDescriptionFromUserIdAsync(userId)
+end)
+if not gotDescription then
+ gotDescription,description=pcall(function()
+  return S.Players:GetHumanoidDescriptionFromUserId(userId)
+ end)
+end
+if not gotDescription or not description then
+avatarStatus.Text="Could not load that avatar. Check the user ID and try again."
+applyAvatar.Text="Apply"
+S.avatarApplyBusy=false
+return
+end
+local applied,applyError=pcall(function()
+if S.cloneHumanoid.ApplyDescriptionReset then
+S.cloneHumanoid:ApplyDescriptionReset(description)
+else
+S.cloneHumanoid:ApplyDescription(description)
+end
+end)
+if applied then
+ task.wait(0.25)
+ S.cloneHumanoid=S.clone:FindFirstChildOfClass("Humanoid") or S.cloneHumanoid
+ S.cloneHumanoid.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+ S.cloneHumanoid.AutoRotate=false
+ S.cloneHumanoid.PlatformStand=true
+ S.cloneRoot=S.clone:WaitForChild("HumanoidRootPart")
+ S.cloneHead=S.clone:WaitForChild("Head")
+ S.partPairs={}
+ S.cloneParts={}
+ local bodyPartNames={Head=true,Torso=true,["Left Arm"]=true,["Right Arm"]=true,["Left Leg"]=true,["Right Leg"]=true}
+ for _,object in ipairs(S.clone:GetDescendants()) do
+  if object:IsA("Script") or object:IsA("LocalScript") then
+   object:Destroy()
+  elseif object:IsA("Motor6D") then
+   object:Destroy()
+  elseif object:IsA("BasePart") then
+   object.CanCollide=false
+   object.CanTouch=false
+   object.CanQuery=false
+   object.Massless=true
+   local insideAccessory=false
+   local ancestor=object.Parent
+   while ancestor and ancestor~=S.clone do
+    if ancestor:IsA("Accessory") then insideAccessory=true break end
+    ancestor=ancestor.Parent
+   end
+   object.Anchored=not insideAccessory
+   if object.Name=="HumanoidRootPart" then
+    object.Transparency=1
+   else
+    table.insert(S.cloneParts,object)
+    if bodyPartNames[object.Name] then
+     local realPart=S.c:FindFirstChild(object.Name,true)
+     if realPart and realPart:IsA("BasePart") then
+      table.insert(S.partPairs,{real=realPart,clone=object})
+     end
+    end
+   end
+  elseif object:IsA("Decal") then
+   object.Transparency=0
+  end
+ end
+ if S.fedoraweld and S.fedoraweld.Parent and S.cloneHead then S.fedoraweld.Part1=S.cloneHead end
+ if S.shadesweld and S.shadesweld.Parent and S.cloneHead then S.shadesweld.Part1=S.cloneHead end
+ avatarStatus.Text="Visible avatar updated to user ID "..tostring(userId).."."
+else
+ avatarStatus.Text="Avatar could not be applied to this rig: "..tostring(applyError):sub(1,90)
+end
+pcall(function() description:Destroy() end)
+applyAvatar.Text="Apply"
+S.avatarApplyBusy=false
+end)
+end)
+
+toggle.Activated:Connect(function()
+panel.Visible=not panel.Visible
+end)
+end
+buildGui()
+S.keybindConnection = S.UserInputService.InputBegan:Connect(function(input, gameProcessed)
+if gameProcessed or S.UserInputService:GetFocusedTextBox() then return end
+if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+
+for _, keyInfo in ipairs(KRYSTAL_DANCE_KEYBINDS) do
+if input.KeyCode == Enum.KeyCode[keyInfo.keyCode] then
+if S.humanoid and S.humanoid.Health > 0 then
+playEmote(keyInfo.dance)
+end
+return
+end
+end
+end)
+S.fadeInTime=0.3
+S.fadeOutTime=0.3
+S.stiffness=45
+S.damping=6.0
+S.maxPitchAngle=math.rad(10)
+S.pivotOffset=Vector3.new(0,1.5,0)
+S.bopTime=0
+S.bopMin=-0.5
+S.bopMax=-0.1
+S.bopDuration=2.0
+S.maxBopTiltX=math.rad(3)
+S.maxWalkTilt=math.rad(26)
+S.lastIsAirborne=false
+S.currentAngleX=0
+S.currentAngleZ=0
+S.velocityX=0
+S.velocityZ=0
+S.currentYawOffset=0
+S.yawVelocity=0
+S.yawStiffness=6
+S.yawDamping=8.0
+S.walkCycleTime=0
+S.walkWeight=0
+S.camera=workspace.CurrentCamera
+S.diedConn = nil
+S.diedConn=S.humanoid.Died:Connect(function()
+if stopMusic then stopMusic() end
+if S.clone and S.clone.Parent then S.clone:Destroy() end
+if S.playerGui:FindFirstChild(S.GUI_NAME) then
+S.playerGui[S.GUI_NAME]:Destroy()
+end
+if S.diedConn then S.diedConn:Disconnect() end
+end)
+S.hbConnection = nil
+S.hbConnection=S.RunService.Heartbeat:Connect(function(dt)
+if not S.c or not S.c.Parent or not S.hrp0 or not S.hrp1 or not S.clone or not S.clone.Parent or S.humanoid.Health<=0 then
+if S.clone and S.clone.Parent then S.clone:Destroy() end
+if S.hbConnection then S.hbConnection:Disconnect() end
+return
+end
+for _,part in ipairs(S.cloneParts) do
+part.CanCollide=false
+part.CanTouch=false
+part.CanQuery=false
+end
+local moveVel=S.hrp1.CFrame:VectorToObjectSpace(S.hrp1.AssemblyLinearVelocity)
+local horizSpeed=Vector3.new(moveVel.X,0,moveVel.Z).Magnitude
+local velocityY=S.hrp1.AssemblyLinearVelocity.Y
+local isGrounded=S.humanoid.FloorMaterial~=Enum.Material.Air
+local localMoveDir=S.hrp1.CFrame:VectorToObjectSpace(S.humanoid.MoveDirection)
+S.strafeDebounce=math.max(0,S.strafeDebounce-dt)
+if isGrounded and horizSpeed>0.5 and S.currentActiveEmote==nil then
+if localMoveDir.X<-0.2 then
+if S.lastStrafeSide~=-1 and S.strafeDebounce<=0 then
+S.lastStrafeSide=-1
+S.strafeDebounce=0.8
+if S.activeStrafeTrack then S.activeStrafeTrack:Stop(0.2) end
+S.activeStrafeTrack=loadAnim("190075311",2)
+S.activeStrafeTrack:Play(0.3)
+S.activeStrafeTrack.TimePosition=0.1
+S.activeStrafeTrack:AdjustSpeed(0)
+task.delay(1,function()
+if S.activeStrafeTrack and S.lastStrafeSide==-1 then
+S.activeStrafeTrack:Stop(0.2)
+S.activeStrafeTrack=nil
+end
+end)
+end
+elseif localMoveDir.X>0.2 then
+if S.lastStrafeSide~=1 and S.strafeDebounce<=0 then
+S.lastStrafeSide=1
+S.strafeDebounce=0.8
+if S.activeStrafeTrack then S.activeStrafeTrack:Stop(0.2) end
+S.activeStrafeTrack=loadAnim("190075311",2)
+S.activeStrafeTrack:Play(0.3)
+S.activeStrafeTrack.TimePosition=0.5
+S.activeStrafeTrack:AdjustSpeed(0)
+task.delay(1,function()
+if S.activeStrafeTrack and S.lastStrafeSide==1 then
+S.activeStrafeTrack:Stop(0.2)
+S.activeStrafeTrack=nil
+end
+end)
+end
+else
+S.lastStrafeSide=0
+if S.activeStrafeTrack then
+S.activeStrafeTrack:Stop(0.2)
+S.activeStrafeTrack=nil
+end
+end
+else
+S.lastStrafeSide=0
+if S.activeStrafeTrack then
+S.activeStrafeTrack:Stop(0.2)
+S.activeStrafeTrack=nil
+end
+end
+local targetPushWeight=S.isPushingUp and 1 or 0
+S.pushWeight=S.pushWeight+(targetPushWeight-S.pushWeight)*math.clamp(dt*30.0,0,1)
+local targetRun90Weight=S.isRunning90s and 1 or 0
+S.run90Weight=S.run90Weight+(targetRun90Weight-S.run90Weight)*math.clamp(dt*30.0,0,1)
+local targetShuffleWeight=S.isShuffling and 1 or 0
+S.shuffleWeight=S.shuffleWeight+(targetShuffleWeight-S.shuffleWeight)*math.clamp(dt*30.0,0,1)
+local targetBarrelWeight=S.isBarrelRolling and 1 or 0
+S.barrelWeight=S.barrelWeight+(targetBarrelWeight-S.barrelWeight)*math.clamp(dt*30.0,0,1)
+local targetSpinWeight=S.isSpinning and 1 or 0
+S.spinWeight=S.spinWeight+(targetSpinWeight-S.spinWeight)*math.clamp(dt*30.0,0,1)
+local targetSwoosherWeight=S.isSwooshing and 1 or 0
+S.swoosherWeight=S.swoosherWeight+(targetSwoosherWeight-S.swoosherWeight)*math.clamp(dt*30.0,0,1)
+local targetSlavWeight=S.isSlavDancing and 1 or 0
+S.slavWeight=S.slavWeight+(targetSlavWeight-S.slavWeight)*math.clamp(dt*30.0,0,1)
+local targetMoonWalkWeight=S.isMoonWalking and 1 or 0
+S.moonWalkWeight=S.moonWalkWeight+(targetMoonWalkWeight-S.moonWalkWeight)*math.clamp(dt*30.0,0,1)
+local targetSpongeWeight=S.isSpongeBobDancing and 1 or 0
+S.spongeWeight=S.spongeWeight+(targetSpongeWeight-S.spongeWeight)*math.clamp(dt*30.0,0,1)
+local targetSpookyWeight=S.isSpooky and 1 or 0
+S.spookyWeight=S.spookyWeight+(targetSpookyWeight-S.spookyWeight)*math.clamp(dt*30.0,0,1)
+local targetNuttyWeight=S.isNutty and 1 or 0
+S.nuttyWeight=S.nuttyWeight+(targetNuttyWeight-S.nuttyWeight)*math.clamp(dt*30.0,0,1)
+local targetLegSwayWeight=S.isLegSwaying and 1 or 0
+S.legSwayWeight=S.legSwayWeight+(targetLegSwayWeight-S.legSwayWeight)*math.clamp(dt*30.0,0,1)
+local targetMoneyWeight=S.isMoney and 1 or 0
+S.moneyWeight=S.moneyWeight+(targetMoneyWeight-S.moneyWeight)*math.clamp(dt*30.0,0,1)
+local targetSitWeight=S.isSit and 1 or 0
+S.sitWeight=S.sitWeight+(targetSitWeight-S.sitWeight)*math.clamp(dt*30.0,0,1)
+local targetDancerWeight=S.isDancer and 1 or 0
+S.dancerWeight=S.dancerWeight+(targetDancerWeight-S.dancerWeight)*math.clamp(dt*30.0,0,1)
+local targetJerkyWeight=S.isJerky and 1 or 0
+S.jerkyWeight=S.jerkyWeight+(targetJerkyWeight-S.jerkyWeight)*math.clamp(dt*30.0,0,1)
+local isMoving=(horizSpeed>0.5) and isGrounded and (S.pushWeight<0.05) and (S.run90Weight<0.05) and (S.shuffleWeight<0.05) and (S.barrelWeight<0.05) and (S.spinWeight<0.05) and (S.swoosherWeight<0.05) and (S.slavWeight<0.05) and (S.moonWalkWeight<0.05) and (S.spongeWeight<0.05) and (S.spookyWeight<0.05) and (S.nuttyWeight<0.05) and (S.legSwayWeight<0.05) and (S.moneyWeight<0.05) and (S.sitWeight<0.05) and (S.dancerWeight<0.05) and (S.jerkyWeight<0.05)
+if isMoving~=S.lastIsMoving then
+S.lastIsMoving=isMoving
+if isMoving then
+S.walkAnimTrack:Play(S.fadeInTime)
+S.walkAnimTrack:AdjustSpeed(0)
+S.overlayAnimTrack:Play(S.fadeInTime)
+S.overlayAnimTrack.TimePosition=0.1
+S.overlayAnimTrack:AdjustSpeed(0)
+else
+S.walkAnimTrack:Stop(S.fadeOutTime)
+S.overlayAnimTrack:Stop(S.fadeOutTime)
+S.velocityX=0
+end
+end
+local targetWalkWeight=isMoving and 1 or 0
+S.walkWeight=S.walkWeight+(targetWalkWeight-S.walkWeight)*math.clamp(dt*30.0,0,1)
+if isMoving then
+S.walkCycleTime=S.walkCycleTime+dt*(2.0/1.65)
+else
+S.walkCycleTime=0.1
+end
+local walkAlpha=(math.sin(S.walkCycleTime*math.pi)+1)*0.5
+if isMoving then
+S.walkAnimTrack.TimePosition=(1-walkAlpha)*0.3
+end
+local isAirborne=not isGrounded and (S.pushWeight<0.05) and (S.run90Weight<0.05) and (S.shuffleWeight<0.05) and (S.barrelWeight<0.05) and (S.spinWeight<0.05) and (S.swoosherWeight<0.05) and (S.slavWeight<0.05) and (S.moonWalkWeight<0.05) and (S.spongeWeight<0.05) and (S.spookyWeight<0.05) and (S.nuttyWeight<0.05) and (S.legSwayWeight<0.05) and (S.moneyWeight<0.05) and (S.sitWeight<0.05) and (S.dancerWeight<0.05) and (S.jerkyWeight<0.05)
+if isAirborne~=S.lastIsAirborne then
+S.lastIsAirborne=isAirborne
+if isAirborne then
+S.jumpAnimTrack:Play(S.fadeInTime)
+S.jumpAnimTrack.TimePosition=0.4
+S.jumpAnimTrack:AdjustSpeed(0.4)
+S.jumpOverlayTrack:Play(S.fadeInTime)
+S.jumpOverlayTrack.TimePosition=0.2
+S.jumpOverlayTrack:AdjustSpeed(0)
+else
+S.jumpAnimTrack:Stop(S.fadeOutTime)
+S.jumpOverlayTrack:Stop(S.fadeOutTime)
+end
+end
+if isAirborne then
+if velocityY<-1 then
+S.jumpAnimTrack:AdjustSpeed(0)
+else
+S.jumpAnimTrack:AdjustSpeed(0.4)
+end
+end
+local isStandingStill=(horizSpeed<=0.5) and isGrounded and not isAirborne and (S.pushWeight<0.05) and (S.run90Weight<0.05) and (S.shuffleWeight<0.05) and (S.barrelWeight<0.05) and (S.spinWeight<0.05) and (S.swoosherWeight<0.05) and (S.slavWeight<0.05) and (S.moonWalkWeight<0.05) and (S.spongeWeight<0.05) and (S.spookyWeight<0.05) and (S.nuttyWeight<0.05) and (S.legSwayWeight<0.05) and (S.moneyWeight<0.05) and (S.sitWeight<0.05) and (S.dancerWeight<0.05) and (S.jerkyWeight<0.05)
+if isStandingStill then
+if not S.isIdlePlaying then
+S.isIdlePlaying=true
+S.idleCycleTime=0
+S.idleTrack1:Play(S.fadeInTime)
+S.idleTrack1.TimePosition=0.1
+S.idleTrack1:AdjustSpeed(0)
+S.idleTrack2:Play(S.fadeInTime)
+S.idleTrack2.TimePosition=0.3
+S.idleTrack2:AdjustSpeed(0)
+S.idleTrack3:Play(S.fadeInTime)
+S.idleTrack3.TimePosition=0.1
+S.idleTrack3:AdjustSpeed(0)
+S.idlePoseAnim1:Play(S.fadeInTime)
+S.idlePoseAnim1.TimePosition=0.9
+S.idlePoseAnim1:AdjustSpeed(0)
+S.idlePoseAnim2:Play(S.fadeInTime)
+S.idlePoseAnim2.TimePosition=1.1
+S.idlePoseAnim2:AdjustSpeed(0)
+end
+S.idleCycleTime=S.idleCycleTime+dt*0.5
+local idleAlpha=(math.sin(S.idleCycleTime*math.pi)+1)*0.5
+S.idlePoseAnim1:AdjustWeight(1-idleAlpha)
+S.idlePoseAnim2:AdjustWeight(idleAlpha)
+else
+if S.isIdlePlaying then
+S.isIdlePlaying=false
+S.idleTrack1:Stop(S.fadeOutTime)
+S.idleTrack2:Stop(S.fadeOutTime)
+S.idleTrack3:Stop(S.fadeOutTime)
+S.idlePoseAnim1:Stop(S.fadeOutTime)
+S.idlePoseAnim2:Stop(S.fadeOutTime)
+end
+end
+local bopFrequency=(2*math.pi)/S.bopDuration
+if horizSpeed>0.5 then
+S.bopTime=S.bopTime+dt*(math.clamp(horizSpeed/8,0.8,1.5))
+else
+S.bopTime=S.bopTime+dt
+end
+local sineValue=math.sin(S.bopTime*bopFrequency)
+local currentBopMin=(horizSpeed>0.5) and -0.25 or S.bopMin
+local currentBopMax=(horizSpeed>0.5) and -0.05 or S.bopMax
+local currentBopTiltX=(horizSpeed>0.5) and (math.rad(1.5)) or S.maxBopTiltX
+local bopYOffset=currentBopMin+(sineValue+1)*0.5*(currentBopMax-currentBopMin)
+local bopTiltX=sineValue*currentBopTiltX
+local cameraPitchX=0
+local targetWalkTiltX=0
+if isMoving then
+targetWalkTiltX=math.clamp(moveVel.Z/16,-1,1)*S.maxWalkTilt
+end
+local normalTargetAngleX=cameraPitchX+bopTiltX+targetWalkTiltX
+local normalYOffset=bopYOffset
+local targetAngleX=normalTargetAngleX
+local targetAngleZ=0
+local forceX=(targetAngleX-S.currentAngleX)*S.stiffness
+S.velocityX=(S.velocityX+forceX*dt)*math.clamp(1-(S.damping*dt),0,1)
+S.currentAngleX=S.currentAngleX+S.velocityX*dt
+local forceZ=(targetAngleZ-S.currentAngleZ)*S.stiffness
+S.velocityZ=(S.velocityZ+forceZ*dt)*math.clamp(1-(S.damping*dt),0,1)
+S.currentAngleZ=S.currentAngleZ+S.velocityZ*dt
+local targetYawOffset=0
+local yawForce=(targetYawOffset-S.currentYawOffset)*S.yawStiffness
+S.yawVelocity=(S.yawVelocity+yawForce*dt)*math.clamp(1-(S.yawDamping*dt),0,1)
+S.currentYawOffset=S.currentYawOffset+S.yawVelocity*dt
+local baseCFrame=S.hrp1.CFrame*CFrame.new(0,normalYOffset,0)
+local rotatedBaseCFrame=baseCFrame*CFrame.Angles(0,S.currentYawOffset,0)
+local pivotCFrame=rotatedBaseCFrame*CFrame.new(S.pivotOffset)
+local tiltRotation=CFrame.Angles(S.currentAngleX,0,S.currentAngleZ)
+local calculatedNormalCFrame=pivotCFrame*tiltRotation*CFrame.new(-S.pivotOffset)
+local calculatedWalkCFrame=S.hrp1.CFrame*CFrame.new(0,bopYOffset,0)*S.walkPose1:Lerp(S.walkPose2,walkAlpha)*CFrame.Angles(bopTiltX,0,0)
+local finalCFrame=calculatedNormalCFrame:Lerp(calculatedWalkCFrame,S.walkWeight)
+if isStandingStill then
+local idleAlpha=(math.sin(S.idleCycleTime*math.pi)+1)*0.5
+local idleCFrameOffset=S.hrp1.CFrame*S.idlePose1:Lerp(S.idlePose2,idleAlpha)
+finalCFrame=finalCFrame:Lerp(idleCFrameOffset,1-S.walkWeight)
+end
+if S.pushWeight>0.001 then
+S.pushTime=S.pushTime+dt*3
+local pushAlpha=(math.sin(S.pushTime)+1)*0.5
+local pushCFrame=S.hrp1.CFrame*S.pushPose1:Lerp(S.pushPose2,pushAlpha)
+finalCFrame=finalCFrame:Lerp(pushCFrame,S.pushWeight)
+end
+if S.run90Weight>0.001 then
+S.sine=S.sine+(dt*1.4)*20
+S.lol90=(S.lol90+11*(dt*1.4)*30)%360
+local rootC0=CFrame.new(1*math.sin(S.sine/10),.1+.8*math.sin(S.sine/3),0)*CFrame.Angles(math.rad(0),math.rad(0*math.sin(S.sine/8)),math.rad(8*math.sin(S.sine/7)))
+local rootC1=CFrame.new(0*math.sin(S.sine/14),0,0)*CFrame.Angles(math.rad(0),math.rad(S.lol90),0)
+local run90CFrame=S.hrp1.CFrame*rootC0*rootC1
+finalCFrame=finalCFrame:Lerp(run90CFrame,S.run90Weight)
+end
+if S.shuffleWeight>0.001 then
+S.shuffleSine=S.shuffleSine+dt*20
+local shuffleCFrame=S.hrp1.CFrame*CFrame.new(2*math.sin(S.shuffleSine/9),-.4+.1*math.sin(S.shuffleSine/3),0)*CFrame.Angles(math.rad(0),math.rad(20*math.sin(S.shuffleSine/9)),0)
+finalCFrame=finalCFrame:Lerp(shuffleCFrame,S.shuffleWeight)
+end
+if S.barrelWeight>0.001 then
+S.barrelSine=S.barrelSine+dt*20
+local barrelCFrame=S.hrp1.CFrame*CFrame.new(5*math.sin(S.barrelSine/8),-1.8,0)*CFrame.Angles(math.rad(-90),math.rad(180*math.sin(S.barrelSine/8)),0)
+finalCFrame=finalCFrame:Lerp(barrelCFrame,S.barrelWeight)
+end
+if S.spinWeight>0.001 then
+S.sine=S.sine+(dt*1.5)*20
+S.recordbaby=S.recordbaby+15*(dt*1.5)*20
+local spinCFrame=S.hrp1.CFrame*CFrame.new(.5*math.sin(S.sine/5),-.2,.5*math.sin(S.sine/4))*CFrame.Angles(math.rad(0),math.rad(S.recordbaby),math.rad(0))
+finalCFrame=finalCFrame:Lerp(spinCFrame,S.spinWeight)
+end
+if S.swoosherWeight>0.001 then
+S.sine=S.sine+dt*20
+S.spinningmove=S.spinningmove+18*dt*20
+local swoosherCFrame=S.hrp1.CFrame*CFrame.new(.2*math.sin(S.sine/3),-.52,.2*math.sin(S.sine/4))*CFrame.Angles(math.rad(180),math.rad(S.spinningmove),math.rad(15*math.sin(S.sine/9)))
+finalCFrame=finalCFrame:Lerp(swoosherCFrame,S.swoosherWeight)
+end
+if S.slavWeight>0.001 then
+S.slavTime=S.slavTime+dt*(math.pi/0.5)
+local slavAlpha=(math.sin(S.slavTime)+1)*0.5
+local interpolatedSlavPose=S.slavPose1:Lerp(S.slavPose2,slavAlpha)
+local slavCFrame=S.hrp1.CFrame*interpolatedSlavPose
+finalCFrame=finalCFrame:Lerp(slavCFrame,S.slavWeight)
+end
+if S.moonWalkWeight>0.001 then
+if S.isMoonWalking then
+S.moonWalkTime=S.moonWalkTime+dt
+local totalCycleDuration=(S.SLIDE_DURATION*2)+(S.TURN_DURATION*2)
+local cycleTime=S.moonWalkTime%totalCycleDuration
+local phase2Start=S.SLIDE_DURATION
+local phase4End=(S.SLIDE_DURATION*2)+S.TURN_DURATION
+if cycleTime>=phase2Start and cycleTime<=phase4End then
+if not S.moonWalkExtraAnim.IsPlaying then
+S.moonWalkExtraAnim:Play(S.fadeInTime)
+S.moonWalkExtraAnim.TimePosition=1
+S.moonWalkExtraAnim:AdjustSpeed(0)
+end
+else
+if S.moonWalkExtraAnim.IsPlaying then
+S.moonWalkExtraAnim:Stop(S.fadeOutTime)
+end
+end
+local zOffset=0
+local yRot=0
+local spinRadians=S.SPIN_COUNT*(2*math.pi)
+if cycleTime<S.SLIDE_DURATION then
+local alpha=cycleTime/S.SLIDE_DURATION
+zOffset=alpha*S.SLIDE_DISTANCE
+yRot=0
+elseif cycleTime<(S.SLIDE_DURATION+S.TURN_DURATION) then
+zOffset=S.SLIDE_DISTANCE
+local alpha=(cycleTime-S.SLIDE_DURATION)/S.TURN_DURATION
+yRot=alpha*(spinRadians+math.pi)
+elseif cycleTime<(S.SLIDE_DURATION*2+S.TURN_DURATION) then
+local alpha=(cycleTime-(S.SLIDE_DURATION+S.TURN_DURATION))/S.SLIDE_DURATION
+zOffset=S.SLIDE_DISTANCE-(alpha*S.SLIDE_DISTANCE)
+yRot=math.pi
+else
+zOffset=0
+local alpha=(cycleTime-(S.SLIDE_DURATION*2+S.TURN_DURATION))/S.TURN_DURATION
+yRot=math.pi+alpha*(spinRadians+math.pi)
+end
+local moonWalkCFrame=S.hrp1.CFrame*CFrame.new(0,0,zOffset)*CFrame.Angles(0,yRot,0)
+finalCFrame=finalCFrame:Lerp(moonWalkCFrame,S.moonWalkWeight)
+else
+if S.moonWalkExtraAnim.IsPlaying then
+S.moonWalkExtraAnim:Stop(S.fadeOutTime)
+end
+end
+else
+if S.moonWalkExtraAnim.IsPlaying then
+S.moonWalkExtraAnim:Stop(S.fadeOutTime)
+end
+end
+if S.spongeWeight>0.001 then
+if S.isSpongeBobDancing then
+S.spongeTime=S.spongeTime+dt*24.0
+local cycle=(S.spongeTime/(math.pi*2))%4
+local currentStep=math.floor(cycle)+1
+local stepProgress=cycle%1
+local smoothedProgress=(1-math.cos(stepProgress*math.pi))/2
+local steps={
+{cframe=S.spongeCFrame1,targetPos=0},
+{cframe=S.spongeCFrame2,targetPos=0.35},
+{cframe=S.spongeCFrame3,targetPos=0.35},
+{cframe=S.spongeCFrame4,targetPos=0}
+}
+local stepA=steps[currentStep]
+local stepB=steps[(currentStep%4)+1]
+S.spongeTargetCFrame=stepA.cframe:Lerp(stepB.cframe,smoothedProgress)
+local timePos=stepA.targetPos+(stepB.targetPos-stepA.targetPos)*smoothedProgress
+S.spongeStepTrack.TimePosition=math.clamp(timePos,0,0.35)
+end
+local spongeCFrame=S.hrp1.CFrame*S.spongeTargetCFrame
+finalCFrame=finalCFrame:Lerp(spongeCFrame,S.spongeWeight)
+end
+if S.spookyWeight>0.001 then
+if S.isSpooky then
+S.spookyTime=S.spookyTime+dt*(math.pi/1.0)
+local alpha=(math.sin(S.spookyTime)+1)*0.5
+S.spookyTargetCFrame=S.spookyCFrame1:Lerp(S.spookyCFrame2,alpha)
+S.spookyAnimTrack.TimePosition=0.25-(0.15*alpha)
+end
+local spookyCFrame=S.hrp1.CFrame*S.spookyTargetCFrame
+finalCFrame=finalCFrame:Lerp(spookyCFrame,S.spookyWeight)
+end
+if S.nuttyWeight>0.001 then
+if S.isNutty then
+S.nuttyTime=S.nuttyTime+dt*(math.pi/1.0)
+local alpha=(math.sin(S.nuttyTime)+1)*0.5
+S.nuttyTargetCFrame=S.nuttyCFrame1:Lerp(S.nuttyCFrame2,alpha)
+S.nuttyAnim1.TimePosition=0
+S.nuttyAnim2.TimePosition=0.2+(0.3*alpha)
+end
+local nuttyCFrame=S.hrp1.CFrame*S.nuttyTargetCFrame
+finalCFrame=finalCFrame:Lerp(nuttyCFrame,S.nuttyWeight)
+end
+if S.legSwayWeight>0.001 then
+if S.isLegSwaying then
+S.legSwayTime=S.legSwayTime+dt*(math.pi/1.0)
+local alpha=(math.sin(S.legSwayTime)+1)*0.5
+S.legSwayTargetCFrame=S.legSwayCFrame1:Lerp(S.legSwayCFrame2,alpha)
+S.legSwayAnim1.TimePosition=0.8+(0.4*alpha)
+S.legSwayAnim2.TimePosition=0.35-(0.35*alpha)
+end
+local legSwayCFrame=S.hrp1.CFrame*S.legSwayTargetCFrame
+finalCFrame=finalCFrame:Lerp(legSwayCFrame,S.legSwayWeight)
+end
+if S.moneyWeight>0.001 then
+if S.isMoney then
+S.moneyTime=S.moneyTime+dt*(math.pi/0.75)
+local alpha=(math.sin(S.moneyTime)+1)*0.5
+S.moneyTargetCFrame=S.moneyCFrame1:Lerp(S.moneyCFrame2,alpha)*CFrame.new(0,-0.06,0)*CFrame.Angles(math.rad(3),0,0)
+S.moneyAnimLayer4.TimePosition=0.3*alpha
+end
+local moneyCFrame=S.hrp1.CFrame*S.moneyTargetCFrame
+finalCFrame=finalCFrame:Lerp(moneyCFrame,S.moneyWeight)
+end
+if S.sitWeight>0.001 then
+if S.isSit then
+S.sitTime=S.sitTime+dt*(math.pi/1.0)
+local alpha=(math.sin(S.sitTime)+1)*0.5
+S.sitTargetCFrame=S.sitCFrame1:Lerp(S.sitCFrame2,alpha)
+end
+local sitCFrame=S.hrp1.CFrame*S.sitTargetCFrame
+finalCFrame=finalCFrame:Lerp(sitCFrame,S.sitWeight)
+end
+if S.dancerWeight>0.001 then
+if S.isDancer then
+S.dancerTime=S.dancerTime+dt*(math.pi/1.0)
+local alpha=(math.sin(S.dancerTime)+1)*0.5
+S.dancerTargetCFrame=S.dancerCFrame1:Lerp(S.dancerCFrame2,alpha)
+S.dancerAnim1.TimePosition=1.5+(1.1*alpha)
+S.dancerAnim2.TimePosition=0.4-(0.3*alpha)
+end
+local dancerCFrame=S.hrp1.CFrame*S.dancerTargetCFrame
+finalCFrame=finalCFrame:Lerp(dancerCFrame,S.dancerWeight)
+end
+if S.jerkyWeight>0.001 then
+if S.isJerky then
+S.jerkyTime=S.jerkyTime+dt*(math.pi/0.5)
+local alpha=(math.sin(S.jerkyTime)+1)*0.5
+S.jerkyTargetCFrame=S.jerkyCFrame1:Lerp(S.jerkyCFrame2,alpha)
+end
+local jerkyCFrame=S.hrp1.CFrame*S.jerkyTargetCFrame
+finalCFrame=finalCFrame:Lerp(jerkyCFrame,S.jerkyWeight)
+end
+local moveDirection=S.hrp1.CFrame:VectorToObjectSpace(S.humanoid.MoveDirection)
+local targetMovementTilt=CFrame.Angles(
+math.rad(-moveDirection.Z)*S.MAX_TILT_ANGLE,
+math.rad(-moveDirection.X)*S.MAX_TILT_ANGLE,
+0
+)
+local tiltAlpha=1-(1-S.TILT_ALPHA)^(dt*60)
+S.currentMovementTilt=S.currentMovementTilt:Lerp(targetMovementTilt,tiltAlpha)
+finalCFrame=finalCFrame*S.currentMovementTilt
+S.hrp0.CFrame=finalCFrame
+S.hrp0.AssemblyLinearVelocity=S.hrp1.AssemblyLinearVelocity
+S.cloneRoot.CFrame=finalCFrame
+local realRootCFrame=S.hrp1.CFrame
+for _,pair in ipairs(S.partPairs) do
+local offsetFromRealRoot=realRootCFrame:ToObjectSpace(pair.real.CFrame)
+pair.clone.CFrame=finalCFrame*offsetFromRealRoot
+end
+end)
+
+
+-- Smooth camera-relative R6 head movement, adapted from the supplied Headmovement.lua.
+task.delay(1, function()
+    local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+
+local Player = Players.LocalPlayer
+
+local ANIMATION_ID = "rbxassetid://118838856009328"
+
+local PITCH = { Down = 1.68, Forward = 2.04, Up = 2.31 }
+local YAW = { Right = 0.32, Forward = 0.66, Left = 1.00 }
+
+local MAX_YAW = 55
+local MAX_PITCH = 40
+local YAW_DEADZONE = 3
+local PITCH_DEADZONE = 8
+
+local YAW_SMOOTHNESS = 16
+local PITCH_SMOOTHNESS = 10
+
+local SWITCH_BIAS = 1.3
+local SWITCH_RELEASE = 0.05
+
+local Character
+local Humanoid
+local Root
+local Track
+
+local CurrentX, CurrentY = 0, 0
+local DesiredAxis = "X"
+local ShownAxis = "X"
+
+local RenderConnection
+local CharacterConnection
+
+local function Cleanup()
+    if RenderConnection then
+        RenderConnection:Disconnect()
+        RenderConnection = nil
+    end
+
+    if CharacterConnection then
+        CharacterConnection:Disconnect()
+        CharacterConnection = nil
+    end
+
+    if Track then
+        Track:Stop(0)
+        Track:Destroy()
+        Track = nil
+    end
+end
+
+local function Amount(angle, maximum, deadzone)
+    local magnitude = math.abs(angle)
+
+    if magnitude <= deadzone then
+        return 0
+    end
+
+    return math.clamp((magnitude - deadzone) / (maximum - deadzone), 0, 1)
+end
+
+local function Ease(t)
+    return 1 - (1 - t) * (1 - t)
+end
+
+local function SetupCharacter(char)
+    Cleanup()
+
+    Character = char
+    Humanoid = char:WaitForChild("Humanoid")
+
+    if Humanoid.RigType ~= Enum.HumanoidRigType.R6 then
+        return
+    end
+
+    Root = char:WaitForChild("HumanoidRootPart")
+
+    local Animator = Humanoid:FindFirstChildOfClass("Animator")
+        or Instance.new("Animator", Humanoid)
+
+    local Animation = Instance.new("Animation")
+    Animation.AnimationId = ANIMATION_ID
+
+    local Success, Result = pcall(function()
+        return Animator:LoadAnimation(Animation)
+    end)
+
+    Animation:Destroy()
+
+    if not Success then
+        warn("Animation failed to load:", Result)
+        return
+    end
+
+    Track = Result
+    Track.Priority = Enum.AnimationPriority.Action4
+    Track.Looped = true
+    Track:Play(0, 1, 0)
+    Track:AdjustSpeed(0)
+
+    CurrentX, CurrentY = 0, 0
+    DesiredAxis, ShownAxis = "X", "X"
+    Track.TimePosition = PITCH.Forward
+
+    RenderConnection = RunService.RenderStepped:Connect(function(dt)
+        if not Track or not Track.IsPlaying then
+            return
+        end
+
+        if not Character or not Character.Parent
+            or not Root or not Root.Parent then
+            return
+        end
+
+        local Camera = workspace.CurrentCamera
+        if not Camera then
+            return
+        end
+
+        local Look = Camera.CFrame.LookVector
+
+        local Yaw = math.deg(math.atan2(
+            Look:Dot(Root.CFrame.RightVector),
+            Look:Dot(Root.CFrame.LookVector)
+        ))
+        local Pitch = math.deg(math.asin(math.clamp(Look.Y, -1, 1)))
+
+        Yaw = math.clamp(Yaw, -MAX_YAW, MAX_YAW)
+        Pitch = math.clamp(Pitch, -MAX_PITCH, MAX_PITCH)
+
+        local RawX = Amount(Yaw, MAX_YAW, YAW_DEADZONE)
+        local RawY = Amount(Pitch, MAX_PITCH, PITCH_DEADZONE)
+
+        if DesiredAxis == "X" and RawY > RawX * SWITCH_BIAS and RawY > 0 then
+            DesiredAxis = "Y"
+        elseif DesiredAxis == "Y" and RawX * SWITCH_BIAS > RawY then
+            DesiredAxis = "X"
+        end
+
+        local TargetX = (DesiredAxis == "X") and RawX * (Yaw >= 0 and 1 or -1) or 0
+        local TargetY = (DesiredAxis == "Y") and RawY * (Pitch >= 0 and 1 or -1) or 0
+
+        local AlphaX = 1 - math.exp(-YAW_SMOOTHNESS * dt)
+        local AlphaY = 1 - math.exp(-PITCH_SMOOTHNESS * dt)
+
+        CurrentX += (TargetX - CurrentX) * AlphaX
+        CurrentY += (TargetY - CurrentY) * AlphaY
+
+        if ShownAxis ~= DesiredAxis then
+            local ShownValue = (ShownAxis == "X") and math.abs(CurrentX) or math.abs(CurrentY)
+            if ShownValue < SWITCH_RELEASE then
+                ShownAxis = DesiredAxis
+            end
+        end
+
+        local Time = PITCH.Forward
+
+        if ShownAxis == "Y" then
+            local e = Ease(math.abs(CurrentY))
+            if CurrentY >= 0 then
+                Time = PITCH.Forward + e * (PITCH.Up - PITCH.Forward)
+            else
+                Time = PITCH.Forward + e * (PITCH.Down - PITCH.Forward)
+            end
+        else
+            local e = Ease(math.abs(CurrentX))
+            if CurrentX >= 0 then
+                Time = YAW.Forward + e * (YAW.Right - YAW.Forward)
+            else
+                Time = YAW.Forward + e * (YAW.Left - YAW.Forward)
+            end
+        end
+
+        Track:AdjustSpeed(0)
+        Track.TimePosition = Time
+    end)
+
+    CharacterConnection = Humanoid.Died:Connect(Cleanup)
+end
+
+Player.CharacterAdded:Connect(SetupCharacter)
+Player.CharacterRemoving:Connect(Cleanup)
+
+if Player.Character then
+    SetupCharacter(Player.Character)
+end
+end)
