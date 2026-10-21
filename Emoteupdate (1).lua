@@ -1955,6 +1955,16 @@ EMOTES = {
         MoveLock = true,
     },
     {
+        Name      = "Boogie Down",
+        Short     = "Boogie\nDown",
+        AnimationId = 75234854039149,
+        AnimationSpeed = 1,
+        DirectAnimation = true,
+        MoveLock = true,
+        AudioUrl  = "https://github.com/GUICLOUDS/EMOTES/raw/refs/heads/main/FORTNITE%20BOOGIE%20DOWN%20EMOTE%20DANCE%20TUTORIAL%20%F0%9F%94%A5%20TIK%20TOK%20TRENDS%202024%20%23dance%20%23dancetutorial%20%23fortnite.mp3",
+        AudioName = "Boogie",
+    },
+    {
         Name      = "UNLOCK IT",
         Short     = "UNLOCK IT",
         AnimationId = 86242587105200,
