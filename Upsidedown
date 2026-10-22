@@ -1,17 +1,113 @@
-local lp = game:GetService("Players").LocalPlayer
-local c = lp.Character
-local hrp0 = c:FindFirstChild("HumanoidRootPart")
+
+
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local PhysicsService = game:GetService("PhysicsService")
+local lp = Players.LocalPlayer
+local c = lp.Character or lp.CharacterAdded:Wait()
+if not c or not c.Parent then return end
+c.Archivable = true
+pcall(function()
+local oldClone = workspace:FindFirstChild(lp.Name .. "_Clone")
+if oldClone then oldClone:Destroy() end
+if lp:FindFirstChild("PlayerGui") then
+local oldGui = lp.PlayerGui:FindFirstChild("EmoteGui")
+if oldGui then oldGui:Destroy() end
+end
+end)
+local PLAYER_GROUP = "Noli"
+local CLONE_GROUP = "Is GAY"
+pcall(function()
+PhysicsService:RegisterCollisionGroup(PLAYER_GROUP)
+PhysicsService:RegisterCollisionGroup(CLONE_GROUP)
+PhysicsService:CollisionGroupSetCollidable(PLAYER_GROUP, CLONE_GROUP, false)
+end)
+local hrp0 = c:WaitForChild("HumanoidRootPart")
+local humanoid = c:WaitForChild("Humanoid")
 local hrp1 = hrp0:Clone()
 c.Parent = nil
 hrp0.Parent = hrp1
+if hrp0:FindFirstChild("RootJoint") then
 hrp0.RootJoint.Part0 = nil
+end
 hrp1.Parent = c
 c.Parent = workspace
-local h = game:GetService("RunService").Heartbeat
-hrp0.Transparency = 0.8
-while h:Wait() and c and c.Parent do
-    hrp0.CFrame = hrp1.CFrame
-    hrp0.Orientation += Vector3.new(0, 0, 180)
-    hrp0.Position -= Vector3.new(0, 1, 0)
-    hrp0.Velocity = hrp1.Velocity
+local clone = c:Clone()
+c.Archivable = false
+clone.Name = lp.Name .. "_Clone"
+clone.Parent = workspace
+local cloneRoot = clone:WaitForChild("HumanoidRootPart")
+local cloneHumanoid = clone:WaitForChild("Humanoid")
+cloneHumanoid.DisplayDistanceType = Enum.HumanoidDisplayDistanceType.None
+cloneHumanoid.AutoRotate = false
+cloneHumanoid.PlatformStand = true
+for _, part in ipairs(c:GetDescendants()) do
+if part:IsA("BasePart") then
+part.Transparency = 1
+pcall(function() part.CollisionGroup = PLAYER_GROUP end)
+elseif part:IsA("Decal") then
+part.Transparency = 1
+elseif part:IsA("Accoutrement") or part:IsA("Accessory") then
+local handle = part:FindFirstChild("Handle")
+if handle and handle:IsA("BasePart") then
+handle.Transparency = 1
+pcall(function() handle.CollisionGroup = PLAYER_GROUP end)
 end
+end
+end
+local partPairs = {}
+local cloneParts = {}
+for _, object in ipairs(clone:GetDescendants()) do
+if object:IsA("Script") or object:IsA("LocalScript") then
+object:Destroy()
+elseif object:IsA("Motor6D") then
+object:Destroy()
+elseif object:IsA("BasePart") then
+object.CanCollide = false
+object.CanTouch = false
+object.CanQuery = false
+object.Massless = true
+object.Anchored = true
+pcall(function() object.CollisionGroup = CLONE_GROUP end)
+table.insert(cloneParts, object)
+if object.Name == "HumanoidRootPart" then
+object.Transparency = 1
+else
+object.Transparency = 0
+local realPart = c:FindFirstChild(object.Name, true)
+if realPart and realPart:IsA("BasePart") and realPart ~= hrp0 and realPart ~= hrp1 then
+table.insert(partPairs, {real = realPart, clone = object})
+end
+end
+elseif object:IsA("Decal") then
+object.Transparency = 0
+end
+end
+hrp0.Transparency = 1
+local diedConn
+diedConn = humanoid.Died:Connect(function()
+if clone and clone.Parent then clone:Destroy() end
+if diedConn then diedConn:Disconnect() end
+end)
+local hbConnection
+hbConnection = RunService.Heartbeat:Connect(function(dt)
+if not c or not c.Parent or not hrp0 or not hrp1 or not clone or not clone.Parent or humanoid.Health <= 0 then
+if clone and clone.Parent then clone:Destroy() end
+if hbConnection then hbConnection:Disconnect() end
+return
+end
+for _, part in ipairs(cloneParts) do
+part.CanCollide = false
+part.CanTouch = false
+part.CanQuery = false
+end
+local invertedCFrame = hrp1.CFrame * CFrame.new(0, -0.5, 0) * CFrame.Angles(0, 0, math.pi)
+hrp0.CFrame = invertedCFrame
+hrp0.AssemblyLinearVelocity = hrp1.AssemblyLinearVelocity
+cloneRoot.CFrame = invertedCFrame
+local realRootCFrame = hrp1.CFrame
+for _, pair in ipairs(partPairs) do
+local offsetFromRealRoot = realRootCFrame:ToObjectSpace(pair.real.CFrame)
+pair.clone.CFrame = invertedCFrame * offsetFromRealRoot
+end
+end)
