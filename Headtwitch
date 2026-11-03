@@ -1,0 +1,328 @@
+local Players = game:GetService("Players")
+local ContentProvider = game:GetService("ContentProvider")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local env = getgenv()
+
+if env.AnimSession and env.AnimSession.Stop then
+    pcall(env.AnimSession.Stop)
+end
+
+env.AnimConfig = {
+    Enabled = true,
+    RollInterval = 1,
+    AnimationId = "rbxassetid://118838856009328",
+
+    MinTimestamps = 1,
+    MaxTimestamps = 5,
+
+    ChanceByCount = {
+        [1] = 30,
+        [2] = 8,
+        [3] = 6,
+        [4] = 4.5,
+        [5] = 3
+    },
+
+    Timestamps = {
+        6.91,
+        6.29,
+        6.74,
+        5.68,
+        6.12,
+        5.43,
+        4.74,
+        5.91,
+        4.38,
+        5.16,
+        4.62,
+        3.97,
+        4.21,
+        3.54,
+        4.83,
+        3.18,
+        3.76,
+        2.94,
+        3.42,
+        2.61,
+        2.87,
+        2.23,
+        2.49,
+        1.96,
+        2.14,
+        1.57,
+        1.82,
+        1.29,
+        1.64,
+        0.93,
+        1.18,
+        0.57,
+        0.81,
+        0.24,
+        0.08
+    },
+
+    FrameDuration = 0.1
+}
+
+local state = {
+    Running = true,
+    Playing = false,
+    Track = nil,
+    Character = nil
+}
+
+env.AnimSession = state
+
+local function stopSession()
+    if not state.Running then
+        return
+    end
+
+    state.Running = false
+    env.AnimConfig.Enabled = false
+
+    if state.Track then
+        pcall(function()
+            state.Track:Stop(0)
+        end)
+    end
+
+    if state.DeathConnection then
+        state.DeathConnection:Disconnect()
+        state.DeathConnection = nil
+    end
+
+    if state.CharacterRemovingConnection then
+        state.CharacterRemovingConnection:Disconnect()
+        state.CharacterRemovingConnection = nil
+    end
+
+    if state.CharacterAddedConnection then
+        state.CharacterAddedConnection:Disconnect()
+        state.CharacterAddedConnection = nil
+    end
+end
+
+state.Stop = stopSession
+
+local function watchCharacter(character)
+    if not state.Running then
+        return
+    end
+
+    state.Character = character
+
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+        or character:WaitForChild("Humanoid", 10)
+
+    if not state.Running then
+        return
+    end
+
+    if player.Character ~= character then
+        return
+    end
+
+    if humanoid then
+        if humanoid.Health <= 0 then
+            stopSession()
+            return
+        end
+
+        state.DeathConnection = humanoid.Died:Connect(function()
+            stopSession()
+        end)
+    end
+end
+
+state.CharacterRemovingConnection = player.CharacterRemoving:Connect(function(character)
+    if character == state.Character then
+        stopSession()
+    end
+end)
+
+state.CharacterAddedConnection = player.CharacterAdded:Connect(function(character)
+    watchCharacter(character)
+end)
+
+if player.Character then
+    task.spawn(watchCharacter, player.Character)
+end
+
+local function getAnimator()
+    local char = player.Character
+    if not char then return end
+
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+
+    return hum:FindFirstChildOfClass("Animator")
+        or Instance.new("Animator", hum)
+end
+
+local function shuffle(list)
+    for i = #list, 2, -1 do
+        local j = math.random(1, i)
+        list[i], list[j] = list[j], list[i]
+    end
+
+    return list
+end
+
+local function playFrameSequence(timestamps)
+    if not state.Running or state.Playing then
+        return
+    end
+
+    local cfg = env.AnimConfig
+    local animator = getAnimator()
+
+    if not state.Running or not animator then
+        return
+    end
+
+    state.Playing = true
+
+    local anim = Instance.new("Animation")
+    anim.AnimationId = cfg.AnimationId
+
+    local track
+
+    local success, err = pcall(function()
+        pcall(function()
+            ContentProvider:PreloadAsync({anim})
+        end)
+
+        if not state.Running then
+            return
+        end
+
+        track = animator:LoadAnimation(anim)
+        state.Track = track
+
+        if not state.Running then
+            return
+        end
+
+        track.Priority = Enum.AnimationPriority.Action4
+        track.Looped = false
+
+        track:Play(0, 1, 0)
+
+        local startClock = os.clock()
+
+        while state.Running and track.Length <= 0
+            and os.clock() - startClock < 3 do
+            task.wait()
+        end
+
+        if not state.Running or not track.IsPlaying then
+            return
+        end
+
+        for _, timestamp in ipairs(timestamps) do
+            if not state.Running then
+                break
+            end
+
+            cfg = env.AnimConfig
+
+            if not cfg.Enabled or not track.IsPlaying then
+                break
+            end
+
+            timestamp = tonumber(timestamp)
+
+            if timestamp then
+                if track.Length > 0 then
+                    timestamp = math.clamp(
+                        timestamp,
+                        0,
+                        math.min(7, track.Length - 0.03)
+                    )
+                else
+                    timestamp = math.clamp(timestamp, 0, 7)
+                end
+
+                track.TimePosition = timestamp
+                track:AdjustSpeed(0)
+
+                RunService.Heartbeat:Wait()
+
+                if not state.Running then
+                    break
+                end
+
+                task.wait(cfg.FrameDuration or 0.1)
+            end
+        end
+    end)
+
+    if track then
+        pcall(function()
+            track:Stop(0)
+            track:Destroy()
+        end)
+    end
+
+    if state.Track == track then
+        state.Track = nil
+    end
+
+    anim:Destroy()
+    state.Playing = false
+
+    if not success then
+        warn("Animation error:", err)
+    end
+end
+
+task.spawn(function()
+    while state.Running do
+        local cfg = env.AnimConfig
+
+        task.wait(math.max(0.05, tonumber(cfg.RollInterval) or 1))
+
+        if not state.Running then
+            break
+        end
+
+        cfg = env.AnimConfig
+
+        if cfg.Enabled and not state.Playing then
+            local pool = table.clone(cfg.Timestamps)
+            local available = #pool
+
+            if available > 0 then
+                local minCount = math.clamp(
+                    math.floor(cfg.MinTimestamps or 1),
+                    1,
+                    available
+                )
+
+                local maxCount = math.clamp(
+                    math.floor(cfg.MaxTimestamps or 5),
+                    minCount,
+                    available
+                )
+
+                local count = math.random(minCount, maxCount)
+                local chance = cfg.ChanceByCount[count] or 0
+
+                if math.random() * 100 < chance then
+                    shuffle(pool)
+
+                    local selected = {}
+
+                    for i = 1, count do
+                        selected[i] = pool[i]
+                    end
+
+                    task.spawn(playFrameSequence, selected)
+                end
+            end
+        end
+    end
+end)
